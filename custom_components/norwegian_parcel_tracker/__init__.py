@@ -15,6 +15,7 @@ PLATFORMS = ["sensor", "button"]
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    await _async_register_services(hass)
     return True
 
 
