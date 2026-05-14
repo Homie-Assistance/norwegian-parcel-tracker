@@ -37,8 +37,18 @@ class HomeDeliveryButton(CoordinatorEntity[PostenTrackingCoordinator], ButtonEnt
         return bool(self.coordinator.data and self.coordinator.data.home_delivery_url)
 
     async def async_press(self) -> None:
-        # HA button entities cannot open a browser directly. URL is exposed as attribute.
-        return None
+        url = self.coordinator.data.home_delivery_url if self.coordinator.data else None
+        if not url:
+            return
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "title": "Bestill hjemlevering",
+                "message": f"[Klikk her for å bestille hjemlevering]({url})",
+                "notification_id": f"home_delivery_{self.entry.entry_id}",
+            },
+        )
 
     @property
     def extra_state_attributes(self):
