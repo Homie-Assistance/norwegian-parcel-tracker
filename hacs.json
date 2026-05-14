@@ -1,0 +1,8 @@
+{
+  "name": "Norwegian parcel tracker",
+  "render_readme": true,
+  "homeassistant": "2025.1.0",
+  "domains": [
+    "norwegian_parcel_tracker"
+  ]
+}

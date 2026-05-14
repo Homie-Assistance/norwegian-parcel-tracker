@@ -1,0 +1,18 @@
+{
+  "domain": "norwegian_parcel_tracker",
+  "name": "Norwegian parcel tracker",
+  "version": "0.1.5",
+  "config_flow": true,
+  "documentation": "https://github.com/Homie-Assistance/norwegian-parcel-tracker",
+  "issue_tracker": "https://github.com/Homie-Assistance/norwegian-parcel-tracker/issues",
+  "codeowners": [
+    "@0ofta"
+  ],
+  "requirements": [],
+  "dependencies": [],
+  "iot_class": "cloud_polling",
+  "integration_type": "service",
+  "loggers": [
+    "custom_components.norwegian_parcel_tracker"
+  ]
+}

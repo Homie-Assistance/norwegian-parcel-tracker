@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add parcel",
+        "description": "Enter a Posten/Bring tracking number. Other settings are configured globally from the integration options.",
+        "data": {
+          "tracking_number": "Tracking number",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not fetch tracking data",
+      "unknown": "Unexpected error"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Norwegian parcel tracker settings",
+        "description": "{restart_note}",
+        "data": {
+          "notify_target": "Notify service target, for example notify.mobile_app_phone",
+          "calendar_entity": "Calendar for estimated delivery",
+          "notify_all_events": "Notify on every new parcel event",
+          "notify_delivered": "Notify when parcel is delivered",
+          "create_calendar_event": "Create all-day estimated delivery calendar event",
+          "stale_warning_hours": "Warn when not moved after",
+          "stale_critical_hours": "Critical when not moved after",
+          "max_weight_kg": "Maximum package weight",
+          "max_length_cm": "Maximum package length",
+          "max_width_cm": "Maximum package width",
+          "max_height_cm": "Maximum package height"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Parcel tracking icon</title>
+  <desc id="desc">A simplified parcel tracking app icon showing a package, location pin, route line, and delivery checkmark.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8F7FF"/>
+      <stop offset="1" stop-color="#BDEBFF"/>
+    </linearGradient>
+    <linearGradient id="boxTop" x1="139" y1="167" x2="373" y2="247" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD783"/>
+      <stop offset="1" stop-color="#F3A93E"/>
+    </linearGradient>
+    <linearGradient id="boxFront" x1="110" y1="220" x2="402" y2="425" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6B34B"/>
+      <stop offset="1" stop-color="#D77B21"/>
+    </linearGradient>
+    <linearGradient id="pin" x1="306" y1="49" x2="420" y2="194" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF6A4A"/>
+      <stop offset="1" stop-color="#E5261F"/>
+    </linearGradient>
+    <filter id="shadow" x="62" y="70" width="388" height="392" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#17324D" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#bg)"/>
+
+  <!-- simple route, visible at small sizes -->
+  <path d="M109 151C166 100 230 104 281 140C328 173 363 176 409 136" stroke="#176C9E" stroke-width="18" stroke-linecap="round" stroke-dasharray="4 35"/>
+
+  <!-- location pin -->
+  <path d="M363 53C325 53 294 84 294 122C294 172 363 229 363 229C363 229 432 172 432 122C432 84 401 53 363 53Z" fill="url(#pin)" stroke="#9F1714" stroke-width="14" stroke-linejoin="round"/>
+  <circle cx="363" cy="122" r="25" fill="white"/>
+
+  <g filter="url(#shadow)">
+    <!-- package -->
+    <path d="M107 202L256 132L405 202L256 280L107 202Z" fill="url(#boxTop)" stroke="#8B531B" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M107 202L256 280V431L107 352V202Z" fill="url(#boxFront)" stroke="#8B531B" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M405 202L256 280V431L405 352V202Z" fill="#E89231" stroke="#8B531B" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M205 156L352 231V290L307 267L256 294L152 238V181L205 156Z" fill="#FFE5A8" opacity="0.95"/>
+    <path d="M256 280V431" stroke="#8B531B" stroke-width="14" stroke-linecap="round"/>
+
+    <!-- label -->
+    <rect x="137" y="279" width="96" height="74" rx="10" fill="white" stroke="#8B531B" stroke-width="10"/>
+    <path d="M155 302H211" stroke="#2D3B45" stroke-width="10" stroke-linecap="round"/>
+    <path d="M155 326H191" stroke="#2D3B45" stroke-width="10" stroke-linecap="round"/>
+    <path d="M207 326H215" stroke="#2D3B45" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <!-- delivery status badge -->
+  <circle cx="343" cy="337" r="70" fill="#37B24D" stroke="#0B5D1E" stroke-width="16"/>
+  <path d="M307 337L332 362L383 306" stroke="white" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
