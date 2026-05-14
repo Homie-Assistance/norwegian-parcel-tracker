@@ -82,15 +82,18 @@ _EVENT_DESCRIPTIONS: dict[str, str] = {
 def translate_parcel_data(parcel: ParcelData) -> None:
     """Translate Norwegian Posten data fields to English in-place.
 
-    Fields that have no mapping pass through unchanged (they are still
-    Norwegian — this is expected and documented behaviour).
+    Priority: known description lookup → current_status code lookup → pass through.
+    The current_status fallback kicks in even when status_description is set but
+    not in our table, ensuring at least a clean English status code label is shown.
     """
     if parcel.status_description:
-        parcel.status_description = _STATUS_DESCRIPTIONS.get(
-            parcel.status_description, parcel.status_description
+        parcel.status_description = (
+            _STATUS_DESCRIPTIONS.get(parcel.status_description)
+            or (parcel.current_status and _STATUS_CODES.get(parcel.current_status))
+            or parcel.status_description
         )
-    elif parcel.current_status and parcel.current_status in _STATUS_CODES:
-        parcel.status_description = _STATUS_CODES[parcel.current_status]
+    elif parcel.current_status:
+        parcel.status_description = _STATUS_CODES.get(parcel.current_status)
 
     for event in parcel.events:
         if event.description:

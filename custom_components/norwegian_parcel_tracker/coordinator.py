@@ -109,14 +109,21 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
 
         return result
 
+    def _get_effective_language(self) -> str:
+        """Return the language for Posten data, falling back to the HA system language."""
+        global_opts = self._get_global_options()
+        if CONF_LANGUAGE in global_opts:
+            return global_opts[CONF_LANGUAGE]
+        ha_lang = (self.hass.config.language or "nb")[:2].lower()
+        return LANGUAGE_ENGLISH if ha_lang == "en" else LANGUAGE_NORWEGIAN
+
     async def _async_update_data(self) -> ParcelData:
         try:
             parcel = await self.client.async_get_tracking(self.tracking_number)
         except PostenTrackingError as err:
             raise UpdateFailed(str(err)) from err
 
-        global_opts = self._get_global_options()
-        if global_opts.get(CONF_LANGUAGE) == LANGUAGE_ENGLISH:
+        if self._get_effective_language() == LANGUAGE_ENGLISH:
             translate_parcel_data(parcel)
 
         await self._async_handle_side_effects(parcel)
