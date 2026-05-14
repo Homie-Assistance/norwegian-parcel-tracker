@@ -35,6 +35,7 @@ from .const import (
     DOMAIN,
     GLOBAL_ENTRY_UNIQUE_ID,
     LANGUAGE_ENGLISH,
+    LANGUAGE_NORWEGIAN,
 )
 from .posten_translations import translate_parcel_data
 from .runtime_strings import _t
