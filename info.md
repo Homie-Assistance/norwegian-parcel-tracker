@@ -1,104 +1,25 @@
-# Norwegian parcel tracker
+# Norwegian Parcel Tracker
 
-Track parcels from Posten and Bring in Home Assistant.
+Track parcels from Posten and Bring directly in Home Assistant.
 
-This custom integration reads parcel information from `sporing.posten.no` and exposes package status, latest event, estimated delivery, pickup point, dimensions and event history as Home Assistant entities.
+Reads live tracking data from `sporing.posten.no` and creates a set of sensor entities for each parcel, with optional notifications, calendar events, and a companion Lovelace card.
 
-> Initial public test release: **v0.1.0**
+**Requires Home Assistant 2025.1.0 or later.**
 
-## Features in v0.1.0
+## Entities per parcel
 
-- Add parcels from the Home Assistant UI.
-- Tracks Posten/Bring parcel status.
-- Sensors for:
-  - status
-  - latest event
-  - estimated delivery
-  - pickup point
-  - sender
-  - delivery method
-  - weight
-  - dimensions
-- Full parcel event history as entity attributes.
-- Global options for notification/calendar related settings.
-- Service for adding parcels later:
-  - `norwegian_parcel_tracker.add_parcel`
-- Optional home-delivery button entity when Posten exposes a home-delivery URL.
+- Status, latest event, estimated delivery, pickup point, sender, delivery method
+- Weight, length, width, height
+- Home delivery button (when Posten provides a URL)
 
-## Installation with HACS
+## Features
 
-1. Open HACS.
-2. Add this repository as a custom repository:
-   `https://github.com/Homie-Assistance/norwegian-parcel-tracker`
-3. Category: **Integration**
-4. Install **Norwegian parcel tracker**.
-5. Restart Home Assistant.
-6. Go to **Settings → Devices & services → Add integration**.
-7. Search for **Norwegian parcel tracker**.
-8. Add your tracking number.
+- Add parcels from the HA UI or via the `norwegian_parcel_tracker.add_parcel` service
+- Optional push notifications on new events or delivery
+- Optional all-day calendar event on the estimated delivery date
+- Configurable stale/stuck parcel warnings
+- Norwegian and English translations
 
-## Manual installation
+## Companion card
 
-Copy this folder:
-
-```text
-custom_components/norwegian_parcel_tracker
-```
-
-to:
-
-```text
-/config/custom_components/norwegian_parcel_tracker
-```
-
-or, on some installations:
-
-```text
-/homeassistant/custom_components/norwegian_parcel_tracker
-```
-
-Then restart Home Assistant.
-
-## Lovelace card
-
-The dashboard card is intentionally separated into its own HACS frontend package:
-
-```text
-https://github.com/Homie-Assistance/norwegian-parcel-tracker-card
-```
-
-Planned HACS frontend resource:
-
-```text
-/hacsfiles/norwegian-parcel-tracker-card/norwegian-parcel-tracker-card.js
-```
-
-Example dashboard card:
-
-```yaml
-type: custom:norwegian-parcel-tracker-card
-title: Pakker
-show_delivered: false
-highlight_stuck: true
-```
-
-## Screenshots
-
-Screenshots will be added before the stable launch release.
-
-<!-- TODO: Add screenshot of Devices & Services entry -->
-<!-- TODO: Add screenshot of generated parcel sensors -->
-<!-- TODO: Add screenshot of Lovelace card -->
-
-## Notes and limitations
-
-- Historical events from Posten are shown in attributes, but Home Assistant recorder history is not backfilled.
-- Location names are not yet geocoded to coordinates.
-- Calendar and notification helper features are still considered experimental in this test release.
-- This integration is not affiliated with Posten, Bring or Posten Bring AS.
-
-## Support
-
-Report issues here:
-
-https://github.com/Homie-Assistance/norwegian-parcel-tracker/issues
+A separate Lovelace dashboard card is available at [norwegian-parcel-tracker-card](https://github.com/Homie-Assistance/norwegian-parcel-tracker-card).
