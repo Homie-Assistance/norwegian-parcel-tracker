@@ -355,6 +355,7 @@ def _sanitize_pickup_name(value: Any) -> str | None:
     text = html.unescape(str(value)).strip()
     if not text:
         return None
+    # Keep in sync with _cleanPickup in norwegian-parcel-tracker-card
     known_bad = {
         "expectedPickupUnitURL",
         "expectedPickupUnitUrl",
