@@ -1,3 +1,11 @@
+## 0.1.6
+
+- Fixed sensor attribute bloat: only the status sensor now carries the full ParcelData payload (including event history); the other 9 sensors expose only their own field. Reduces HA recorder storage significantly on busy parcels.
+- Fixed delivery notification re-firing after HA restart: `_delivered_notified` was in-memory only, causing a second "pakken er levert" notification on every restart for already-delivered parcels.
+- Fixed `add_parcel` service disappearing after removing all parcels and restarting HA: service is now registered in `async_setup` so it is available as soon as the component loads.
+- Fixed home delivery button being a no-op: pressing it now fires a persistent notification with a clickable link to the Posten home delivery URL.
+- Fixed pickup/ETA sanitization blocklist drift between `api.py` and the Lovelace card: added sync comments and added missing `"pickup-point"` entry to the card's blocklist.
+
 ## 0.1.4
 
 - Fixed pickup fallback so internal Posten keys such as `expectedPickupUnitURL` are never shown to users.

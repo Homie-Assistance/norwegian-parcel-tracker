@@ -1,6 +1,6 @@
 DOMAIN = "norwegian_parcel_tracker"
 NAME = "Norwegian parcel tracker"
-VERSION = "0.1.4"
+VERSION = "0.1.6"
 
 CONF_TRACKING_NUMBER = "tracking_number"
 CONF_DISPLAY_NAME = "name"
