@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0
+
+- Switch to independent semantic versioning (previously coupled to card repo build numbers).
+
 ## 0.1.6
 
 - Fixed sensor attribute bloat: only the status sensor now carries the full ParcelData payload (including event history); the other 9 sensors expose only their own field. Reduces HA recorder storage on busy parcels.

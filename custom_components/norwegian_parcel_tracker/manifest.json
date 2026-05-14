@@ -1,7 +1,7 @@
 {
   "domain": "norwegian_parcel_tracker",
   "name": "Norwegian parcel tracker",
-  "version": "0.1.6",
+  "version": "1.0.0",
   "config_flow": true,
   "documentation": "https://github.com/Homie-Assistance/norwegian-parcel-tracker",
   "issue_tracker": "https://github.com/Homie-Assistance/norwegian-parcel-tracker/issues",
