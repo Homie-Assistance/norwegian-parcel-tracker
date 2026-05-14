@@ -179,6 +179,9 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         status = parcel.status_description or parcel.current_status or parcel.status
 
         first_run = self._last_event_key is None and self._last_status is None
+        if first_run and parcel.is_delivered:
+            self._delivered_notified = True
+
         notify_all = bool(options.get(CONF_NOTIFY_ALL_EVENTS))
         notify_delivered = bool(options.get(CONF_NOTIFY_DELIVERED, True))
 
