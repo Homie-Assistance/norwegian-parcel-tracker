@@ -3,10 +3,42 @@
     "step": {
       "user": {
         "title": "Legg til pakke",
-        "description": "Skriv inn et sporingsnummer fra Posten/Bring. Andre innstillinger konfigureres fra integrasjonens alternativer.",
+        "description": "Skriv inn et sporingsnummer fra Posten/Bring. Globale innstillinger (språk, leveringskontekster) konfigureres via Innstillinger-oppføringen som ble opprettet første gang du la til denne integrasjonen.",
         "data": {
           "tracking_number": "Sporingsnummer",
           "name": "Visningsnavn"
+        }
+      },
+      "global": {
+        "title": "Globale innstillinger",
+        "description": "Konfigurer språk og leveringskontekster. Disse innstillingene gjelder for alle sporede pakker og kan endres senere fra Innstillinger-oppføringen.",
+        "data": {
+          "language": "Språk for Posten-data",
+          "mailbox_enabled": "Aktiver postkapasitetsjekk",
+          "mailbox_length_cm": "Postkassens spaltelengde",
+          "mailbox_width_cm": "Postkassens spaltebredde",
+          "mailbox_height_cm": "Postkassens spaltehøyde",
+          "car_enabled": "Aktiver bagasjeromssjekk",
+          "car_length_cm": "Bagasjeromets lengde",
+          "car_width_cm": "Bagasjeromets bredde",
+          "car_height_cm": "Bagasjeromets høyde",
+          "carry_enabled": "Aktiver bæresjekk",
+          "carry_length_cm": "Maks bærelengde",
+          "carry_width_cm": "Maks bærebredde",
+          "carry_height_cm": "Maks bærehøyde",
+          "default_notify_target": "Standard varslingstjeneste",
+          "default_calendar_entity": "Standard kalender",
+          "default_notify_all_events": "Standard: varsle ved alle sporingshendelser",
+          "default_notify_delivered": "Standard: varsle når pakken er levert",
+          "default_create_calendar_event": "Standard: opprett kalenderoppføring for estimert levering",
+          "default_stale_warning_hours": "Standard advarselsgrense — timer uten bevegelse",
+          "default_stale_critical_hours": "Standard kritisk grense — timer uten bevegelse"
+        },
+        "data_description": {
+          "language": "Norsk viser Postens opprinnelige tekst. Engelsk oversetter statuser og hendelser til engelsk.",
+          "mailbox_enabled": "Når aktivert rapporterer statussensoren om pakken passer gjennom postkassespalten din.",
+          "car_enabled": "Når aktivert rapporterer statussensoren om pakken passer i bagasjerommet ditt.",
+          "carry_enabled": "Når aktivert rapporterer statussensoren om pakken er liten nok til å bæres for hånd."
         }
       }
     },
@@ -18,7 +50,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Innstillinger for norsk pakkesporing",
+        "title": "Pakkeinnstillinger",
         "description": "{restart_note}",
         "data": {
           "notify_target": "Varslingstjeneste (f.eks. notify.mobile_app_telefon)",
@@ -27,11 +59,39 @@
           "notify_delivered": "Varsle når pakken er levert",
           "create_calendar_event": "Opprett heldagsoppføring i kalender for estimert levering",
           "stale_warning_hours": "Advarselsgrense — timer uten bevegelse",
-          "stale_critical_hours": "Kritisk grense — timer uten bevegelse",
-          "max_weight_kg": "Maksimal pakkevekt",
-          "max_length_cm": "Maksimal pakkelengde",
-          "max_width_cm": "Maksimal pakkebredde",
-          "max_height_cm": "Maksimal pakkehøyde"
+          "stale_critical_hours": "Kritisk grense — timer uten bevegelse"
+        }
+      },
+      "global_settings": {
+        "title": "Globale innstillinger",
+        "description": "Disse innstillingene gjelder for alle sporede pakker.",
+        "data": {
+          "language": "Språk for Posten-data",
+          "mailbox_enabled": "Aktiver postkapasitetsjekk",
+          "mailbox_length_cm": "Postkassens spaltelengde",
+          "mailbox_width_cm": "Postkassens spaltebredde",
+          "mailbox_height_cm": "Postkassens spaltehøyde",
+          "car_enabled": "Aktiver bagasjeromssjekk",
+          "car_length_cm": "Bagasjeromets lengde",
+          "car_width_cm": "Bagasjeromets bredde",
+          "car_height_cm": "Bagasjeromets høyde",
+          "carry_enabled": "Aktiver bæresjekk",
+          "carry_length_cm": "Maks bærelengde",
+          "carry_width_cm": "Maks bærebredde",
+          "carry_height_cm": "Maks bærehøyde",
+          "default_notify_target": "Standard varslingstjeneste",
+          "default_calendar_entity": "Standard kalender",
+          "default_notify_all_events": "Standard: varsle ved alle sporingshendelser",
+          "default_notify_delivered": "Standard: varsle når pakken er levert",
+          "default_create_calendar_event": "Standard: opprett kalenderoppføring for estimert levering",
+          "default_stale_warning_hours": "Standard advarselsgrense — timer uten bevegelse",
+          "default_stale_critical_hours": "Standard kritisk grense — timer uten bevegelse"
+        },
+        "data_description": {
+          "language": "Norsk viser Postens opprinnelige tekst. Engelsk oversetter statuser og hendelser til engelsk.",
+          "mailbox_enabled": "Når aktivert rapporterer statussensoren om pakken passer gjennom postkassespalten din.",
+          "car_enabled": "Når aktivert rapporterer statussensoren om pakken passer i bagasjerommet ditt.",
+          "carry_enabled": "Når aktivert rapporterer statussensoren om pakken er liten nok til å bæres for hånd."
         }
       }
     }

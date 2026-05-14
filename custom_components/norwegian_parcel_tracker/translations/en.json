@@ -3,10 +3,42 @@
     "step": {
       "user": {
         "title": "Add parcel",
-        "description": "Enter a Posten/Bring tracking number. Other settings are configured from the integration options.",
+        "description": "Enter a Posten/Bring tracking number. Global settings (language, delivery contexts) are configured via the Settings entry that was created when you first added this integration.",
         "data": {
           "tracking_number": "Tracking number",
           "name": "Display name"
+        }
+      },
+      "global": {
+        "title": "Global settings",
+        "description": "Configure language and delivery context thresholds. These settings apply to all tracked parcels and can be changed later from the Settings entry.",
+        "data": {
+          "language": "Posten data language",
+          "mailbox_enabled": "Enable mailbox fit check",
+          "mailbox_length_cm": "Mailbox slot length",
+          "mailbox_width_cm": "Mailbox slot width",
+          "mailbox_height_cm": "Mailbox slot height",
+          "car_enabled": "Enable car boot fit check",
+          "car_length_cm": "Car boot length",
+          "car_width_cm": "Car boot width",
+          "car_height_cm": "Car boot height",
+          "carry_enabled": "Enable carry-by-hand fit check",
+          "carry_length_cm": "Carry max length",
+          "carry_width_cm": "Carry max width",
+          "carry_height_cm": "Carry max height",
+          "default_notify_target": "Default notification service",
+          "default_calendar_entity": "Default calendar",
+          "default_notify_all_events": "Default: notify on all tracking events",
+          "default_notify_delivered": "Default: notify when parcel is delivered",
+          "default_create_calendar_event": "Default: create calendar event for estimated delivery",
+          "default_stale_warning_hours": "Default warning threshold — hours without movement",
+          "default_stale_critical_hours": "Default critical threshold — hours without movement"
+        },
+        "data_description": {
+          "language": "Norwegian shows Posten's original text. English translates statuses and events to English.",
+          "mailbox_enabled": "When enabled, the status sensor reports whether the parcel fits through your mailbox slot.",
+          "car_enabled": "When enabled, the status sensor reports whether the parcel fits in your car boot.",
+          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand."
         }
       }
     },
@@ -18,7 +50,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Norwegian Parcel Tracker settings",
+        "title": "Parcel options",
         "description": "{restart_note}",
         "data": {
           "notify_target": "Notification service (e.g. notify.mobile_app_phone)",
@@ -27,11 +59,39 @@
           "notify_delivered": "Notify when parcel is delivered",
           "create_calendar_event": "Create an all-day calendar event for estimated delivery",
           "stale_warning_hours": "Warning threshold — hours without movement",
-          "stale_critical_hours": "Critical threshold — hours without movement",
-          "max_weight_kg": "Maximum package weight",
-          "max_length_cm": "Maximum package length",
-          "max_width_cm": "Maximum package width",
-          "max_height_cm": "Maximum package height"
+          "stale_critical_hours": "Critical threshold — hours without movement"
+        }
+      },
+      "global_settings": {
+        "title": "Global settings",
+        "description": "These settings apply to all tracked parcels.",
+        "data": {
+          "language": "Posten data language",
+          "mailbox_enabled": "Enable mailbox fit check",
+          "mailbox_length_cm": "Mailbox slot length",
+          "mailbox_width_cm": "Mailbox slot width",
+          "mailbox_height_cm": "Mailbox slot height",
+          "car_enabled": "Enable car boot fit check",
+          "car_length_cm": "Car boot length",
+          "car_width_cm": "Car boot width",
+          "car_height_cm": "Car boot height",
+          "carry_enabled": "Enable carry-by-hand fit check",
+          "carry_length_cm": "Carry max length",
+          "carry_width_cm": "Carry max width",
+          "carry_height_cm": "Carry max height",
+          "default_notify_target": "Default notification service",
+          "default_calendar_entity": "Default calendar",
+          "default_notify_all_events": "Default: notify on all tracking events",
+          "default_notify_delivered": "Default: notify when parcel is delivered",
+          "default_create_calendar_event": "Default: create calendar event for estimated delivery",
+          "default_stale_warning_hours": "Default warning threshold — hours without movement",
+          "default_stale_critical_hours": "Default critical threshold — hours without movement"
+        },
+        "data_description": {
+          "language": "Norwegian shows Posten's original text. English translates statuses and events to English.",
+          "mailbox_enabled": "When enabled, the status sensor reports whether the parcel fits through your mailbox slot.",
+          "car_enabled": "When enabled, the status sensor reports whether the parcel fits in your car boot.",
+          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand."
         }
       }
     }

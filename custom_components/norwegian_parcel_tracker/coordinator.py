@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 import logging
+from typing import Any
 
 from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
@@ -12,14 +13,30 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import PostenTrackingClient, PostenTrackingError, ParcelData
 from .const import (
     CONF_CALENDAR_ENTITY,
+    CONF_CAR_ENABLED, CONF_CAR_H, CONF_CAR_L, CONF_CAR_W,
+    CONF_CARRY_ENABLED, CONF_CARRY_H, CONF_CARRY_L, CONF_CARRY_W,
     CONF_CREATE_CALENDAR_EVENT,
+    CONF_DEFAULT_CALENDAR_ENTITY,
+    CONF_DEFAULT_CREATE_CALENDAR_EVENT,
+    CONF_DEFAULT_NOTIFY_ALL_EVENTS,
+    CONF_DEFAULT_NOTIFY_DELIVERED,
+    CONF_DEFAULT_NOTIFY_TARGET,
+    CONF_DEFAULT_STALE_CRITICAL_HOURS,
+    CONF_DEFAULT_STALE_WARNING_HOURS,
+    CONF_LANGUAGE,
+    CONF_MAILBOX_ENABLED, CONF_MAILBOX_H, CONF_MAILBOX_L, CONF_MAILBOX_W,
     CONF_NOTIFY_ALL_EVENTS,
     CONF_NOTIFY_DELIVERED,
     CONF_NOTIFY_TARGET,
+    CONF_STALE_CRITICAL_HOURS,
+    CONF_STALE_WARNING_HOURS,
     CONF_TRACKING_NUMBER,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
+    GLOBAL_ENTRY_UNIQUE_ID,
+    LANGUAGE_ENGLISH,
 )
+from .posten_translations import translate_parcel_data
 from .runtime_strings import _t
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,17 +60,70 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             config_entry=entry,
         )
 
+    def _get_global_options(self) -> dict[str, Any]:
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.unique_id == GLOBAL_ENTRY_UNIQUE_ID:
+                return dict(entry.options or {})
+        return {}
+
+    def _get_effective_options(self) -> dict[str, Any]:
+        g = self._get_global_options()
+        per_parcel = dict(self.entry.options or {})
+        defaults: dict[str, Any] = {
+            CONF_NOTIFY_TARGET: g.get(CONF_DEFAULT_NOTIFY_TARGET, ""),
+            CONF_CALENDAR_ENTITY: g.get(CONF_DEFAULT_CALENDAR_ENTITY, ""),
+            CONF_NOTIFY_ALL_EVENTS: g.get(CONF_DEFAULT_NOTIFY_ALL_EVENTS, False),
+            CONF_NOTIFY_DELIVERED: g.get(CONF_DEFAULT_NOTIFY_DELIVERED, True),
+            CONF_CREATE_CALENDAR_EVENT: g.get(CONF_DEFAULT_CREATE_CALENDAR_EVENT, False),
+            CONF_STALE_WARNING_HOURS: g.get(CONF_DEFAULT_STALE_WARNING_HOURS, 24),
+            CONF_STALE_CRITICAL_HOURS: g.get(CONF_DEFAULT_STALE_CRITICAL_HOURS, 72),
+        }
+        return {**defaults, **per_parcel}
+
+    @property
+    def fits_attributes(self) -> dict[str, Any]:
+        global_opts = self._get_global_options()
+        data = self.data
+        if not data:
+            return {}
+
+        result: dict[str, Any] = {}
+        parcel_dims = [data.length_cm, data.width_cm, data.height_cm]
+
+        for ctx_name, enabled_key, l_key, w_key, h_key in [
+            ("mailbox", CONF_MAILBOX_ENABLED, CONF_MAILBOX_L, CONF_MAILBOX_W, CONF_MAILBOX_H),
+            ("car", CONF_CAR_ENABLED, CONF_CAR_L, CONF_CAR_W, CONF_CAR_H),
+            ("carry", CONF_CARRY_ENABLED, CONF_CARRY_L, CONF_CARRY_W, CONF_CARRY_H),
+        ]:
+            if not global_opts.get(enabled_key):
+                continue
+
+            ctx_dims = [global_opts.get(l_key), global_opts.get(w_key), global_opts.get(h_key)]
+
+            if None in parcel_dims or None in ctx_dims:
+                result[f"fits_{ctx_name}"] = None
+            else:
+                p_sorted = sorted(float(d) for d in parcel_dims)  # type: ignore[arg-type]
+                c_sorted = sorted(float(d) for d in ctx_dims)  # type: ignore[arg-type]
+                result[f"fits_{ctx_name}"] = all(p <= c for p, c in zip(p_sorted, c_sorted))
+
+        return result
+
     async def _async_update_data(self) -> ParcelData:
         try:
             parcel = await self.client.async_get_tracking(self.tracking_number)
         except PostenTrackingError as err:
             raise UpdateFailed(str(err)) from err
 
+        global_opts = self._get_global_options()
+        if global_opts.get(CONF_LANGUAGE) == LANGUAGE_ENGLISH:
+            translate_parcel_data(parcel)
+
         await self._async_handle_side_effects(parcel)
         return parcel
 
     async def _async_handle_side_effects(self, parcel: ParcelData) -> None:
-        options = self.entry.options or {}
+        options = self._get_effective_options()
         await self._async_create_calendar_event(parcel, options)
         await self._async_send_notifications(parcel, options)
 
@@ -120,7 +190,6 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._calendar_created_for = calendar_key
 
     async def _async_calendar_event_exists(self, calendar_entity: str, start: date, end: date, tracking_number: str, summary: str) -> bool:
-        """Return True if the calendar already contains this parcel ETA event."""
         try:
             response = await self.hass.services.async_call(
                 "calendar",

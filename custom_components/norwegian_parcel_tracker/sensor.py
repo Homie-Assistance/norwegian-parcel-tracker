@@ -74,6 +74,7 @@ class ParcelStatusSensor(BaseParcelSensor):
         attrs = self.coordinator.data.as_dict()
         attrs["parcel_tracker_entity"] = self._key
         attrs["npt_master_entity"] = True
+        attrs.update(self.coordinator.fits_attributes)
         return attrs
 
 
