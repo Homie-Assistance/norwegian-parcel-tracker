@@ -1,6 +1,4 @@
 add_parcel:
-  name: Add parcel
-  description: Add a new parcel tracking number.
   fields:
     tracking_number:
       required: true

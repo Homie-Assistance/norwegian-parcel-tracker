@@ -18,5 +18,4 @@ CONF_MAX_WIDTH_CM = "max_width_cm"
 CONF_MAX_HEIGHT_CM = "max_height_cm"
 
 DEFAULT_SCAN_INTERVAL_MINUTES = 30
-PICKUP_NOT_AVAILABLE_NO = "Hentested er ikke tilgjengelig for denne pakken"
 CARD_REPO_URL = "https://github.com/Homie-Assistance/norwegian-parcel-tracker-card"

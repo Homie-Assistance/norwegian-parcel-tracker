@@ -2,36 +2,69 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add parcel",
-        "description": "Enter a Posten/Bring tracking number. Other settings are configured globally from the integration options.",
+        "title": "Legg til pakke",
+        "description": "Skriv inn et sporingsnummer fra Posten/Bring. Andre innstillinger konfigureres fra integrasjonens alternativer.",
         "data": {
-          "tracking_number": "Tracking number",
-          "name": "Name"
+          "tracking_number": "Sporingsnummer",
+          "name": "Visningsnavn"
         }
       }
     },
     "error": {
-      "cannot_connect": "Could not fetch tracking data",
-      "unknown": "Unexpected error"
+      "cannot_connect": "Kunne ikke hente sporingsinformasjon fra Posten",
+      "unknown": "Uventet feil"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Norwegian parcel tracker settings",
+        "title": "Innstillinger for norsk pakkesporing",
         "description": "{restart_note}",
         "data": {
-          "notify_target": "Notify service target, for example notify.mobile_app_phone",
-          "calendar_entity": "Calendar for estimated delivery",
-          "notify_all_events": "Notify on every new parcel event",
-          "notify_delivered": "Notify when parcel is delivered",
-          "create_calendar_event": "Create all-day estimated delivery calendar event",
-          "stale_warning_hours": "Warn when not moved after",
-          "stale_critical_hours": "Critical when not moved after",
-          "max_weight_kg": "Maximum package weight",
-          "max_length_cm": "Maximum package length",
-          "max_width_cm": "Maximum package width",
-          "max_height_cm": "Maximum package height"
+          "notify_target": "Varslingstjeneste (f.eks. notify.mobile_app_telefon)",
+          "calendar_entity": "Kalender for estimert leveringsdato",
+          "notify_all_events": "Varsle ved alle nye sporingshendelser",
+          "notify_delivered": "Varsle når pakken er levert",
+          "create_calendar_event": "Opprett heldagsoppføring i kalender for estimert levering",
+          "stale_warning_hours": "Advarselsgrense — timer uten bevegelse",
+          "stale_critical_hours": "Kritisk grense — timer uten bevegelse",
+          "max_weight_kg": "Maksimal pakkevekt",
+          "max_length_cm": "Maksimal pakkelengde",
+          "max_width_cm": "Maksimal pakkebredde",
+          "max_height_cm": "Maksimal pakkehøyde"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": { "name": "Status" },
+      "latest_event": { "name": "Siste hendelse" },
+      "estimated_delivery": { "name": "Estimert levering" },
+      "pickup_point": { "name": "Hentested" },
+      "sender": { "name": "Avsender" },
+      "delivery_method": { "name": "Leveringsmetode" },
+      "weight": { "name": "Vekt" },
+      "length": { "name": "Lengde" },
+      "width": { "name": "Bredde" },
+      "height": { "name": "Høyde" }
+    },
+    "button": {
+      "order_home_delivery": { "name": "Bestill hjemlevering" }
+    }
+  },
+  "services": {
+    "add_parcel": {
+      "name": "Legg til pakke",
+      "description": "Legger til et nytt sporingsnummer i integrasjonen.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummer fra Posten/Bring."
+        },
+        "name": {
+          "name": "Visningsnavn",
+          "description": "Valgfritt navn som vises i integrasjonslisten."
         }
       }
     }

@@ -8,6 +8,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_DISPLAY_NAME, DOMAIN
 from .coordinator import PostenTrackingCoordinator
+from .runtime_strings import _t
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -17,7 +18,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 class HomeDeliveryButton(CoordinatorEntity[PostenTrackingCoordinator], ButtonEntity):
     _attr_has_entity_name = True
-    _attr_name = "Order home delivery"
+    _attr_translation_key = "order_home_delivery"
     _attr_icon = "mdi:home-import-outline"
 
     def __init__(self, coordinator: PostenTrackingCoordinator, entry: ConfigEntry) -> None:
@@ -44,8 +45,8 @@ class HomeDeliveryButton(CoordinatorEntity[PostenTrackingCoordinator], ButtonEnt
             "persistent_notification",
             "create",
             {
-                "title": "Bestill hjemlevering",
-                "message": f"[Klikk her for å bestille hjemlevering]({url})",
+                "title": _t(self.hass, "home_delivery_title"),
+                "message": _t(self.hass, "home_delivery_msg", url=url),
                 "notification_id": f"home_delivery_{self.entry.entry_id}",
             },
         )

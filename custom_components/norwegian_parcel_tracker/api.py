@@ -10,7 +10,6 @@ from typing import Any
 
 import aiohttp
 
-from .const import PICKUP_NOT_AVAILABLE_NO
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,10 +67,6 @@ class ParcelData:
         ).lower()
         return "pakken er levert" in text or "delivered" in text or self.current_status == "DELIVERED"
 
-    @property
-    def pickup_display(self) -> str:
-        return self.pickup_name or PICKUP_NOT_AVAILABLE_NO
-
     def as_dict(self) -> dict[str, Any]:
         latest = self.latest_event
         return {
@@ -86,7 +81,6 @@ class ParcelData:
             "estimated_delivery": self.estimated_delivery,
             "estimated_delivery_iso": self.estimated_delivery_iso,
             "pickup_name": self.pickup_name,
-            "pickup_display": self.pickup_display,
             "pickup_url": self.pickup_url,
             "delivery_address": self.delivery_address,
             "delivery_method": self.delivery_method,

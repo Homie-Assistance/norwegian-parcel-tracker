@@ -19,8 +19,8 @@ from .const import (
     CONF_TRACKING_NUMBER,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
-    PICKUP_NOT_AVAILABLE_NO,
 )
+from .runtime_strings import _t
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,13 +53,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         return parcel
 
     async def _async_handle_side_effects(self, parcel: ParcelData) -> None:
-        """Create configured calendar events and notifications.
-
-        This intentionally runs inside the coordinator so it also works for
-        parcels added before the user configured global options.
-        """
         options = self.entry.options or {}
-
         await self._async_create_calendar_event(parcel, options)
         await self._async_send_notifications(parcel, options)
 
@@ -72,7 +66,6 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         if not calendar_entity or not eta:
             return
 
-        # Avoid duplicate creates in the same runtime.
         calendar_key = f"{calendar_entity}:{eta}:{parcel.tracking_number}"
         if self._calendar_created_for == calendar_key:
             return
@@ -84,22 +77,24 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             return
 
         end = start + timedelta(days=1)
-        sender = parcel.sender_name or "pakke"
-        summary = f"Pakke fra {sender}"
-        pickup = parcel.pickup_name or PICKUP_NOT_AVAILABLE_NO
-        latest = parcel.latest_event.description if parcel.latest_event else "Ukjent"
-        location = parcel.latest_event.location if parcel.latest_event else "Ukjent"
-        description = (
-            f"Sporingsnummer: {parcel.tracking_number}\n"
-            f"Avsender: {parcel.sender_name or 'Ukjent'}\n"
-            f"Status: {parcel.status_description or parcel.current_status or 'Ukjent'}\n"
-            f"Siste hendelse: {latest}\n"
-            f"Sist sett: {location}\n"
-            f"Hentested: {pickup}\n"
-            f"Leveringsmetode: {parcel.delivery_method or parcel.product_name or 'Ukjent'}\n"
-            f"Vekt: {parcel.weight_kg if parcel.weight_kg is not None else 'Ukjent'} kg\n"
-            f"Mål: {parcel.length_cm or 'Ukjent'} × {parcel.width_cm or 'Ukjent'} × {parcel.height_cm or 'Ukjent'} cm"
-        )
+        unk = _t(self.hass, "calendar_unknown")
+        sender = parcel.sender_name or unk
+        summary = _t(self.hass, "calendar_summary", sender=sender)
+        pickup = parcel.pickup_name or _t(self.hass, "pickup_not_available")
+        latest = parcel.latest_event.description if parcel.latest_event else unk
+        location = parcel.latest_event.location if parcel.latest_event else unk
+
+        description = "\n".join([
+            f"{_t(self.hass, 'calendar_field_tracking')}: {parcel.tracking_number}",
+            f"{_t(self.hass, 'calendar_field_sender')}: {parcel.sender_name or unk}",
+            f"{_t(self.hass, 'calendar_field_status')}: {parcel.status_description or parcel.current_status or unk}",
+            f"{_t(self.hass, 'calendar_field_latest_event')}: {latest}",
+            f"{_t(self.hass, 'calendar_field_last_seen')}: {location}",
+            f"{_t(self.hass, 'calendar_field_pickup')}: {pickup}",
+            f"{_t(self.hass, 'calendar_field_delivery_method')}: {parcel.delivery_method or parcel.product_name or unk}",
+            f"{_t(self.hass, 'calendar_field_weight')}: {parcel.weight_kg if parcel.weight_kg is not None else unk} kg",
+            f"{_t(self.hass, 'calendar_field_dimensions')}: {parcel.length_cm or unk} × {parcel.width_cm or unk} × {parcel.height_cm or unk} cm",
+        ])
 
         if await self._async_calendar_event_exists(calendar_entity, start, end, parcel.tracking_number, summary):
             self._calendar_created_for = calendar_key
@@ -125,12 +120,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._calendar_created_for = calendar_key
 
     async def _async_calendar_event_exists(self, calendar_entity: str, start: date, end: date, tracking_number: str, summary: str) -> bool:
-        """Return True if the configured calendar already contains this parcel ETA event.
-
-        This prevents duplicate all-day events after Home Assistant restarts or
-        integration reloads. Different calendar providers return slightly different
-        response shapes, so the check is intentionally defensive.
-        """
+        """Return True if the calendar already contains this parcel ETA event."""
         try:
             response = await self.hass.services.async_call(
                 "calendar",
@@ -188,16 +178,20 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         if not first_run and notify_all and (latest_key != self._last_event_key or status != self._last_status):
             await self._async_notify(
                 target,
-                "Pakkeoppdatering",
-                f"{parcel.sender_name or parcel.tracking_number}: {latest.description if latest else status or 'Ny oppdatering'}",
+                _t(self.hass, "notify_event_title"),
+                _t(self.hass, "notify_event_msg",
+                   sender=parcel.sender_name or parcel.tracking_number,
+                   event=latest.description if latest else status or _t(self.hass, "notify_event_title")),
             )
 
         if notify_delivered and parcel.is_delivered and not self._delivered_notified:
-            destination = parcel.pickup_name or "postkassen eller døren"
+            destination = parcel.pickup_name or _t(self.hass, "pickup_not_available")
             await self._async_notify(
                 target,
-                "Pakken er levert",
-                f"Your package from {parcel.sender_name or 'unknown sender'} has arrived at {destination}.",
+                _t(self.hass, "notify_delivered_title"),
+                _t(self.hass, "notify_delivered_msg",
+                   sender=parcel.sender_name or _t(self.hass, "calendar_unknown"),
+                   destination=destination),
             )
             self._delivered_notified = True
 

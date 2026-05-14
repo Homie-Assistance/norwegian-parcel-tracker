@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
@@ -10,8 +9,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_DISPLAY_NAME, DOMAIN, PICKUP_NOT_AVAILABLE_NO
+from .const import CONF_DISPLAY_NAME, DOMAIN
 from .coordinator import PostenTrackingCoordinator
+from .runtime_strings import _t
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -35,11 +35,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class BaseParcelSensor(CoordinatorEntity[PostenTrackingCoordinator], SensorEntity):
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: PostenTrackingCoordinator, entry: ConfigEntry, key: str, name: str) -> None:
+    def __init__(self, coordinator: PostenTrackingCoordinator, entry: ConfigEntry, key: str) -> None:
         super().__init__(coordinator)
         self.entry = entry
         self._key = key
-        self._attr_name = name
+        self._attr_translation_key = key
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         display_name = entry.data.get(CONF_DISPLAY_NAME) or coordinator.tracking_number
         self._attr_device_info = {
@@ -60,7 +60,7 @@ class BaseParcelSensor(CoordinatorEntity[PostenTrackingCoordinator], SensorEntit
 
 
 class ParcelStatusSensor(BaseParcelSensor):
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "status", "Status")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "status")
 
     @property
     def native_value(self):
@@ -78,7 +78,7 @@ class ParcelStatusSensor(BaseParcelSensor):
 
 
 class LatestEventSensor(BaseParcelSensor):
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "latest_event", "Latest event")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "latest_event")
 
     @property
     def native_value(self):
@@ -95,7 +95,7 @@ class LatestEventSensor(BaseParcelSensor):
 
 
 class EstimatedDeliverySensor(BaseParcelSensor):
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "estimated_delivery", "Estimated delivery")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "estimated_delivery")
 
     @property
     def native_value(self):
@@ -112,14 +112,14 @@ class EstimatedDeliverySensor(BaseParcelSensor):
 
 
 class PickupPointSensor(BaseParcelSensor):
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "pickup_point", "Pickup point")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "pickup_point")
 
     @property
     def native_value(self):
         data = self.coordinator.data
         if not data:
             return None
-        return data.pickup_name or PICKUP_NOT_AVAILABLE_NO
+        return data.pickup_name or _t(self.hass, "pickup_not_available")
 
     @property
     def extra_state_attributes(self):
@@ -134,7 +134,7 @@ class PickupPointSensor(BaseParcelSensor):
 
 
 class SenderSensor(BaseParcelSensor):
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "sender", "Sender")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "sender")
 
     @property
     def native_value(self):
@@ -145,7 +145,7 @@ class SenderSensor(BaseParcelSensor):
 
 
 class DeliveryMethodSensor(BaseParcelSensor):
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "delivery_method", "Delivery method")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "delivery_method")
 
     @property
     def native_value(self):
@@ -159,7 +159,7 @@ class DeliveryMethodSensor(BaseParcelSensor):
 class ParcelWeightSensor(BaseParcelSensor):
     _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
 
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "weight", "Weight")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "weight")
 
     @property
     def native_value(self): return self.coordinator.data.weight_kg if self.coordinator.data else None
@@ -171,7 +171,7 @@ class ParcelWeightSensor(BaseParcelSensor):
 class ParcelLengthSensor(BaseParcelSensor):
     _attr_native_unit_of_measurement = UnitOfLength.CENTIMETERS
 
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "length", "Length")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "length")
 
     @property
     def native_value(self): return self.coordinator.data.length_cm if self.coordinator.data else None
@@ -180,7 +180,7 @@ class ParcelLengthSensor(BaseParcelSensor):
 class ParcelWidthSensor(BaseParcelSensor):
     _attr_native_unit_of_measurement = UnitOfLength.CENTIMETERS
 
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "width", "Width")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "width")
 
     @property
     def native_value(self): return self.coordinator.data.width_cm if self.coordinator.data else None
@@ -189,7 +189,7 @@ class ParcelWidthSensor(BaseParcelSensor):
 class ParcelHeightSensor(BaseParcelSensor):
     _attr_native_unit_of_measurement = UnitOfLength.CENTIMETERS
 
-    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "height", "Height")
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "height")
 
     @property
     def native_value(self): return self.coordinator.data.height_cm if self.coordinator.data else None
