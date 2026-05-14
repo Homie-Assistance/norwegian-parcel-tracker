@@ -87,7 +87,7 @@ class LatestEventSensor(BaseParcelSensor):
 
     @property
     def extra_state_attributes(self):
-        attrs = super().extra_state_attributes
+        attrs = {"parcel_tracker_entity": self._key}
         latest = self.coordinator.data.latest_event if self.coordinator.data else None
         if latest:
             attrs.update({"event_time": latest.date_iso, "event_location": latest.location})
@@ -123,7 +123,7 @@ class PickupPointSensor(BaseParcelSensor):
 
     @property
     def extra_state_attributes(self):
-        attrs = super().extra_state_attributes
+        attrs = {"parcel_tracker_entity": self._key}
         data = self.coordinator.data
         if data and data.pickup_name:
             attrs["pickup_url"] = data.pickup_url
