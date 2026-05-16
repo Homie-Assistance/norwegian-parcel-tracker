@@ -14,7 +14,7 @@ This repository contains a Home Assistant custom integration for tracking Norweg
 There is no build system, test suite, or CI/CD pipeline. Development workflow:
 
 - **Backend**: Edit Python files directly in `custom_components/norwegian_parcel_tracker/`. Deploy by copying the directory to `/config/custom_components/` on your HA instance, then restart HA.
-- **Frontend**: The card lives as a single pre-compiled file at `norwegian-parcel-tracker-card/dist/norwegian-parcel-tracker-card.js`. Edit it directly. Deploy by copying to `/config/www/` on HA.
+- **Frontend**: The card lives as a single pre-compiled file at `norwegian-parcel-tracker-card/norwegian-parcel-tracker-card.js`. Edit it directly. Deploy by copying to the appropriate `www/community/norwegian-parcel-tracker-card/` path on HA, or run `deploy.sh`.
 - **Testing**: Manual testing against a live Home Assistant instance. No automated tests exist.
 
 ## Architecture
@@ -33,7 +33,7 @@ Data flows through three layers:
 
 `__init__.py` registers the `add_parcel` service and wires everything together at integration load/unload.
 
-### Frontend (`norwegian-parcel-tracker-card/dist/norwegian-parcel-tracker-card.js`)
+### Frontend (`norwegian-parcel-tracker-card/norwegian-parcel-tracker-card.js`)
 
 A single-file custom Lovelace card (`HTMLElement`-based). It queries all `sensor.*_status` entities to list parcels, color-codes rows by staleness (yellow ≥24 h, red ≥72 h, green = delivered), and has an input field that calls the `norwegian_parcel_tracker.add_parcel` service to add new tracking numbers.
 
