@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- Added HACS and hassfest validation workflows.
+- Fixed manifest key ordering and removed invalid `domains` field from hacs.json.
+- Added brand assets for HACS validation.
+
 ## 1.0.0
 
 - Switch to independent semantic versioning (previously coupled to card repo build numbers).
