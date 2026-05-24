@@ -1,0 +1,33 @@
+{
+  "data": {
+    "getParcelTrackingDetails": {
+      "parcelReference": "370724763445770637",
+      "status": "DELIVERED",
+      "estimatedDelivery": {"date": "2026-05-25"},
+      "deliveryPoint": {"postalCode": "7160", "type": "PICKUP_POINT"},
+      "sender": {"postalCode": "1540"},
+      "events": [
+        {
+          "id": "abc123",
+          "createdAt": "2026-05-25T11:00:00+02:00",
+          "status": "DELIVERED",
+          "location": "Trondheim",
+          "message": {
+            "description": "Pakken er levert.",
+            "content": "Pakken er levert til hentested."
+          }
+        },
+        {
+          "id": "def456",
+          "createdAt": "2026-05-24T08:00:00+02:00",
+          "status": "IN_TRANSIT",
+          "location": "Oslo",
+          "message": {
+            "description": "Pakken er på vei.",
+            "content": "Pakken er i transitt."
+          }
+        }
+      ]
+    }
+  }
+}

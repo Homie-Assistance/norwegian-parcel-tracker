@@ -415,7 +415,9 @@ def _looks_like_internal_key(value: Any) -> bool:
     # Values such as "estimatedTimeSpanOfDelivery" are field names accidentally
     # captured as values when a parcel no longer has an ETA. They are usually
     # camelCase identifiers with no spaces, punctuation or digits.
-    return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text)) and not any(ch.isdigit() for ch in text)
+    # Require a camelCase transition (lowercase→uppercase) to distinguish field names
+    # from ordinary Title-case words like city names (e.g. "Trondheim").
+    return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text)) and bool(re.search(r"[a-z][A-Z]", text))
 
 
 def _sanitize_estimated_delivery(value: Any, *, iso: bool = False) -> str | None:

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "getParcelTrackingDetails": {
+      "parcelReference": "370724763445770637",
+      "status": "REGISTERED",
+      "estimatedDelivery": {"date": null},
+      "deliveryPoint": {"postalCode": "7160", "type": "PICKUP_POINT"},
+      "sender": {"postalCode": "1540"},
+      "events": [
+        {
+          "id": "f05deddcb8de501437cd3fa4468d7390",
+          "createdAt": "2026-05-23T17:59:56+02:00",
+          "status": "REGISTERED",
+          "location": null,
+          "message": {
+            "description": "Sporingen oppdateres så snart den er på vår terminal.",
+            "content": "Nettbutikken har meldt at en pakke er på vei!"
+          }
+        }
+      ]
+    }
+  }
+}
