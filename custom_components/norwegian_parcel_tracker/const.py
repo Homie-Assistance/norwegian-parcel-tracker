@@ -58,6 +58,11 @@ CONF_MAX_LENGTH_CM = "max_length_cm"
 CONF_MAX_WIDTH_CM = "max_width_cm"
 CONF_MAX_HEIGHT_CM = "max_height_cm"
 
+# ── Carrier ────────────────────────────────────────────────────────────────────
+CONF_CARRIER = "carrier"
+CARRIER_POSTEN = "posten"
+CARRIER_HELTHJEM = "helthjem"
+
 # ── Misc ───────────────────────────────────────────────────────────────────────
 DEFAULT_SCAN_INTERVAL_MINUTES = 30
 CARD_REPO_URL = "https://github.com/Homie-Assistance/norwegian-parcel-tracker-card"

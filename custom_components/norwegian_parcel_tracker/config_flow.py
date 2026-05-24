@@ -10,7 +10,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import PostenTrackingClient, PostenTrackingError
+from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError
 from .const import (
     CONF_CALENDAR_ENTITY,
     CONF_CAR_ENABLED, CONF_CAR_H, CONF_CAR_L, CONF_CAR_W,
@@ -32,6 +32,9 @@ from .const import (
     CONF_NOTIFY_TARGET,
     CONF_STALE_CRITICAL_HOURS,
     CONF_STALE_WARNING_HOURS,
+    CARRIER_HELTHJEM,
+    CARRIER_POSTEN,
+    CONF_CARRIER,
     CONF_TRACKING_NUMBER,
     DEFAULT_CAR_H, DEFAULT_CAR_L, DEFAULT_CAR_W,
     DEFAULT_CARRY_H, DEFAULT_CARRY_L, DEFAULT_CARRY_W,
@@ -207,23 +210,39 @@ class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
         await self.async_set_unique_id(tracking_number.upper())
         self._abort_if_unique_id_configured()
 
-        client = PostenTrackingClient(async_get_clientsession(self.hass))
+        session = async_get_clientsession(self.hass)
+        parcel = None
+        carrier = CARRIER_POSTEN
+
         try:
-            parcel = await client.async_get_tracking(tracking_number)
-        except PostenTrackingError:
-            errors["base"] = "cannot_connect"
+            parcel = await HelthjemTrackingClient(session).async_get_tracking(tracking_number)
+            carrier = CARRIER_HELTHJEM
+        except HelthjemTrackingError:
+            pass
         except Exception:
-            _LOGGER.exception("Unexpected error validating tracking number")
-            errors["base"] = "unknown"
-        else:
+            pass
+
+        if parcel is None:
+            try:
+                parcel = await PostenTrackingClient(session).async_get_tracking(tracking_number)
+                carrier = CARRIER_POSTEN
+            except PostenTrackingError:
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error validating tracking number")
+                errors["base"] = "unknown"
+
+        if parcel is not None:
             display_name = str(user_input.get(CONF_DISPLAY_NAME) or "").strip()
-            title = display_name or parcel.sender_name or f"Posten {tracking_number}"
+            carrier_label = "Helthjem" if carrier == CARRIER_HELTHJEM else "Posten"
+            title = display_name or parcel.sender_name or f"{carrier_label} {tracking_number}"
             return self.async_create_entry(
                 title=title,
                 data={
                     CONF_TRACKING_NUMBER: tracking_number,
                     CONF_DISPLAY_NAME: display_name,
                     CONF_ENTRY_TYPE: ENTRY_TYPE_PARCEL,
+                    CONF_CARRIER: carrier,
                 },
             )
 

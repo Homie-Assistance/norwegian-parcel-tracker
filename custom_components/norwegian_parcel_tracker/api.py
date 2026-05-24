@@ -18,6 +18,10 @@ class PostenTrackingError(Exception):
     """Raised when tracking data cannot be fetched or parsed."""
 
 
+class HelthjemTrackingError(Exception):
+    """Raised when Helthjem tracking data cannot be fetched or parsed."""
+
+
 @dataclass
 class ParcelEvent:
     description: str | None = None
@@ -121,6 +125,93 @@ class PostenTrackingClient:
             if resp.status >= 400:
                 raise PostenTrackingError(f"Posten returned HTTP {resp.status}")
         return parse_tracking_html(text, tracking_number)
+
+
+_HELTHJEM_GRAPHQL_URL = "https://services.helthjem.no/graphql"
+_HELTHJEM_QUERY = """
+query GetParcelTracking($ref: String!) {
+  getParcelTrackingDetails(parcelReference: $ref) {
+    parcelReference
+    status
+    estimatedDelivery { date }
+    deliveryPoint { postalCode type }
+    sender { postalCode }
+    events {
+      id
+      createdAt
+      status
+      location
+      message { description content }
+    }
+  }
+}
+"""
+
+
+class HelthjemTrackingClient:
+    def __init__(self, session: aiohttp.ClientSession) -> None:
+        self._session = session
+
+    async def async_get_tracking(self, tracking_number: str) -> ParcelData:
+        headers = {
+            "Content-Type": "application/json",
+            "Origin": "https://helthjem.no",
+            "Referer": "https://helthjem.no/sporing/",
+        }
+        payload = {"query": _HELTHJEM_QUERY, "variables": {"ref": tracking_number}}
+        async with self._session.post(
+            _HELTHJEM_GRAPHQL_URL,
+            json=payload,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=25),
+        ) as resp:
+            if resp.status >= 400:
+                raise HelthjemTrackingError(f"Helthjem returned HTTP {resp.status}")
+            body = await resp.json()
+
+        if "errors" in body:
+            raise HelthjemTrackingError(f"Helthjem GraphQL error: {body['errors']}")
+
+        data = (body.get("data") or {}).get("getParcelTrackingDetails")
+        if not data:
+            raise HelthjemTrackingError("No tracking data returned from Helthjem")
+
+        return _parcel_from_helthjem(data, tracking_number)
+
+
+def _parcel_from_helthjem(data: dict[str, Any], tracking_number: str) -> ParcelData:
+    events: list[ParcelEvent] = []
+    for ev in (data.get("events") or []):
+        msg = ev.get("message") or {}
+        description = msg.get("content") or msg.get("description") or ev.get("status")
+        events.append(ParcelEvent(
+            description=description,
+            date_iso=ev.get("createdAt"),
+            location=ev.get("location"),
+            status=ev.get("status"),
+            raw=ev,
+        ))
+    events.sort(key=lambda e: e.date_iso or "", reverse=True)
+
+    delivery_point = data.get("deliveryPoint") or {}
+    estimated = (data.get("estimatedDelivery") or {}).get("date")
+
+    pickup_name = None
+    if delivery_point.get("postalCode"):
+        pickup_name = delivery_point["postalCode"]
+
+    latest = events[0] if events else None
+
+    return ParcelData(
+        tracking_number=tracking_number,
+        current_status=data.get("status"),
+        status_description=latest.description if latest else data.get("status"),
+        estimated_delivery=estimated,
+        estimated_delivery_iso=estimated,
+        pickup_name=pickup_name,
+        delivery_method="Helthjem",
+        events=events,
+    )
 
 
 def parse_tracking_html(text: str, tracking_number: str) -> ParcelData:

@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import PostenTrackingClient, PostenTrackingError, ParcelData
+from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError, ParcelData
 from .const import (
     CONF_CALENDAR_ENTITY,
     CONF_CAR_ENABLED, CONF_CAR_H, CONF_CAR_L, CONF_CAR_W,
@@ -30,6 +30,9 @@ from .const import (
     CONF_NOTIFY_TARGET,
     CONF_STALE_CRITICAL_HOURS,
     CONF_STALE_WARNING_HOURS,
+    CARRIER_HELTHJEM,
+    CARRIER_POSTEN,
+    CONF_CARRIER,
     CONF_TRACKING_NUMBER,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
@@ -47,8 +50,12 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.entry = entry
         self.tracking_number = entry.data[CONF_TRACKING_NUMBER]
+        self._carrier = entry.data.get(CONF_CARRIER, CARRIER_POSTEN)
         session: ClientSession = async_get_clientsession(hass)
-        self.client = PostenTrackingClient(session)
+        if self._carrier == CARRIER_HELTHJEM:
+            self.client = HelthjemTrackingClient(session)
+        else:
+            self.client = PostenTrackingClient(session)
         self._last_event_key: tuple[str | None, str | None] | None = None
         self._last_status: str | None = None
         self._delivered_notified = False
@@ -121,10 +128,10 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
     async def _async_update_data(self) -> ParcelData:
         try:
             parcel = await self.client.async_get_tracking(self.tracking_number)
-        except PostenTrackingError as err:
+        except (PostenTrackingError, HelthjemTrackingError) as err:
             raise UpdateFailed(str(err)) from err
 
-        if self._get_effective_language() == LANGUAGE_ENGLISH:
+        if self._carrier == CARRIER_POSTEN and self._get_effective_language() == LANGUAGE_ENGLISH:
             translate_parcel_data(parcel)
 
         await self._async_handle_side_effects(parcel)
