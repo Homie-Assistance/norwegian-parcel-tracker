@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- Added Helthjem carrier support via GraphQL API (no authentication required).
+- Carrier is auto-detected during parcel setup; existing Posten entries are unaffected.
+
 ## 1.0.1
 
 - Added HACS and hassfest validation workflows.
