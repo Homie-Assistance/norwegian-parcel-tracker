@@ -75,4 +75,16 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             data={"tracking_number": tracking_number, "name": name},
         )
 
+    async def refresh(call):
+        coordinators = [
+            v for v in hass.data.get(DOMAIN, {}).values()
+            if hasattr(v, "_refreshing")
+        ]
+        for coordinator in coordinators:
+            coordinator._refreshing = True
+            coordinator.async_update_listeners()
+        for coordinator in coordinators:
+            await coordinator.async_request_refresh()
+
     hass.services.async_register(DOMAIN, "add_parcel", add_parcel)
+    hass.services.async_register(DOMAIN, "refresh", refresh)

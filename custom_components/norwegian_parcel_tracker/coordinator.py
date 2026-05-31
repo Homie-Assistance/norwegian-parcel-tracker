@@ -60,6 +60,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._last_status: str | None = None
         self._delivered_notified = False
         self._calendar_created_for: str | None = None
+        self._refreshing: bool = False
         super().__init__(
             hass,
             _LOGGER,
@@ -130,6 +131,10 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             parcel = await self.client.async_get_tracking(self.tracking_number)
         except (PostenTrackingError, HelthjemTrackingError) as err:
             raise UpdateFailed(str(err)) from err
+        finally:
+            if self._refreshing:
+                self._refreshing = False
+                self.async_update_listeners()
 
         if self._carrier == CARRIER_POSTEN and self._get_effective_language() == LANGUAGE_ENGLISH:
             translate_parcel_data(parcel)
