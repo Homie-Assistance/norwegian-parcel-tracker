@@ -9,7 +9,7 @@ from custom_components.norwegian_parcel_tracker.api import (
 )
 from helpers import load_fixture
 
-TRACKING_NUMBER = "370724763445770637"
+TRACKING_NUMBER = "000000000000000000"
 GRAPHQL_URL = "https://services.helthjem.no/graphql"
 
 
