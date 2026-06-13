@@ -4,5 +4,11 @@ __pycache__/
 .pytest_cache/
 .vscode/
 .idea/
+# AI assistant files
 .claude/
 CLAUDE.md
+.cursor/
+.cursorrules
+.aider*
+.copilot*
+.github/copilot-instructions.md

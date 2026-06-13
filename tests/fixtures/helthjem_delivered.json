@@ -1,7 +1,7 @@
 {
   "data": {
     "getParcelTrackingDetails": {
-      "parcelReference": "370724763445770637",
+      "parcelReference": "000000000000000000",
       "status": "DELIVERED",
       "estimatedDelivery": {"date": "2026-05-25"},
       "deliveryPoint": {"postalCode": "7160", "type": "PICKUP_POINT"},

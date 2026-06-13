@@ -69,7 +69,12 @@ class ParcelData:
                 self.latest_event.description if self.latest_event else None,
             ]
         ).lower()
-        return "pakken er levert" in text or "delivered" in text or self.current_status == "DELIVERED"
+        return (
+            "pakken er levert" in text
+            or "delivered" in text
+            or "hentet pakken" in text
+            or self.current_status in {"DELIVERED", "PICKED_UP"}
+        )
 
     def as_dict(self) -> dict[str, Any]:
         latest = self.latest_event
