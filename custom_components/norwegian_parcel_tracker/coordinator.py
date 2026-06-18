@@ -23,6 +23,7 @@ from .const import (
     CONF_DEFAULT_NOTIFY_TARGET,
     CONF_DEFAULT_STALE_CRITICAL_HOURS,
     CONF_DEFAULT_STALE_WARNING_HOURS,
+    CONF_DISPLAY_NAME,
     CONF_LANGUAGE,
     CONF_MAILBOX_ENABLED, CONF_MAILBOX_H, CONF_MAILBOX_L, CONF_MAILBOX_W,
     CONF_NOTIFY_ALL_EVENTS,
@@ -133,6 +134,10 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
 
         if self._carrier == CARRIER_POSTEN and self._get_effective_language() == LANGUAGE_ENGLISH:
             translate_parcel_data(parcel)
+
+        display_name = str(self.entry.data.get(CONF_DISPLAY_NAME) or "").strip()
+        if display_name and not parcel.sender_name:
+            parcel.sender_name = display_name
 
         await self._async_handle_side_effects(parcel)
         return parcel
