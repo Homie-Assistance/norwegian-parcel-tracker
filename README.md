@@ -1,8 +1,8 @@
 # Norwegian Parcel Tracker
 
-Track parcels from Posten and Bring directly in Home Assistant.
+Track parcels from Posten, Bring, and Helthjem directly in Home Assistant.
 
-Reads live tracking data from `sporing.posten.no` and creates a set of sensor entities for each parcel, with optional notifications, calendar events, and a companion Lovelace card.
+Creates a set of sensor entities for each parcel, with optional notifications, calendar events, and a companion Lovelace card.
 
 **Requires Home Assistant 2025.1.0 or later.**
 
@@ -12,17 +12,17 @@ Reads live tracking data from `sporing.posten.no` and creates a set of sensor en
 
 Each parcel gets the following entities:
 
-| Entity | Type | Description |
-|---|---|---|
-| Status | Sensor | Current parcel status text |
-| Latest event | Sensor | Most recent tracking event description |
-| Estimated delivery | Sensor | Estimated delivery date |
-| Pickup point | Sensor | Name of pickup location |
-| Sender | Sensor | Sender name |
-| Delivery method | Sensor | Product/service name (e.g. Pakke i postkassen) |
-| Weight | Sensor | Package weight (kg) |
-| Length / Width / Height | Sensor | Package dimensions (cm) |
-| Order home delivery | Button | Fires a persistent notification with a link to order home delivery (only available when Posten provides a URL) |
+| Entity | Type | Carriers | Description |
+|---|---|---|---|
+| Status | Sensor | All | Current parcel status text |
+| Latest event | Sensor | All | Most recent tracking event description |
+| Estimated delivery | Sensor | All | Estimated delivery date |
+| Pickup point | Sensor | All | Name of pickup location |
+| Delivery method | Sensor | All | Carrier product name (e.g. Pakke i postkassen, Helthjem) |
+| Sender | Sensor | Posten/Bring | Sender name |
+| Weight | Sensor | Posten/Bring | Package weight (kg) |
+| Length / Width / Height | Sensor | Posten/Bring | Package dimensions (cm) |
+| Order home delivery | Button | Posten/Bring | Fires a persistent notification with a link to order home delivery (only shown when Posten provides a redirect URL) |
 
 The **Status** sensor carries the full event history and all parcel details as entity attributes.
 
@@ -106,7 +106,7 @@ highlight_stuck: true
 
 - Parcel event history is shown in entity attributes but is not backfilled into the HA recorder.
 - Location names are not geocoded to map coordinates.
-- This integration is not affiliated with Posten, Bring, or Posten Bring AS.
+- This integration is not affiliated with Posten, Bring, Posten Bring AS, or Helthjem.
 
 ---
 
