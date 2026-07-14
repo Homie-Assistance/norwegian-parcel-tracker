@@ -43,7 +43,9 @@
       }
     },
     "error": {
-      "cannot_connect": "Could not fetch tracking data from Posten",
+      "cannot_connect": "Could not fetch tracking data from Posten/Bring",
+      "helthjem_cannot_connect": "Could not fetch tracking data from Helthjem",
+      "unsupported_tracking_number": "Invalid or unsupported tracking number. This integration only supports Bring, Helthjem, and Posten. Support for more delivery companies is planned and coming in the near future.",
       "unknown": "Unexpected error"
     }
   },

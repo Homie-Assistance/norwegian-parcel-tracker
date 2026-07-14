@@ -43,7 +43,9 @@
       }
     },
     "error": {
-      "cannot_connect": "Kunne ikke hente sporingsinformasjon fra Posten",
+      "cannot_connect": "Kunne ikke hente sporingsinformasjon fra Posten/Bring",
+      "helthjem_cannot_connect": "Kunne ikke hente sporingsinformasjon fra Helthjem",
+      "unsupported_tracking_number": "Ugyldig eller ikke-støttet sporingsnummer. Denne integrasjonen støtter kun Bring, Helthjem og Posten. Støtte for flere leverandører er planlagt og kommer i nær fremtid.",
       "unknown": "Uventet feil"
     }
   },

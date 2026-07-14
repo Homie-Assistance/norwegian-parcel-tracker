@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -144,6 +145,24 @@ def _build_global_schema(hass, opts: dict) -> vol.Schema:
     return vol.Schema(schema_items)
 
 
+def _guess_carrier_from_format(tracking_number: str) -> str | None:
+    """Heuristic: return 'posten', 'helthjem', or None based on tracking number format."""
+    tn = re.sub(r"\s", "", tracking_number).upper()
+    # International postal: AA123456789NO (e.g. RR, EE, EV prefixes)
+    if re.fullmatch(r"[A-Z]{2}\d{8,9}[A-Z]{2}", tn):
+        return "posten"
+    # Bring/Posten letter prefixes
+    if re.match(r"^(JD|JVNO|JV|00)", tn):
+        return "posten"
+    # GS1-128 (18+ digits)
+    if re.fullmatch(r"\d{18,}", tn):
+        return "posten"
+    # Helthjem: short pure-numeric reference (6–10 digits)
+    if re.fullmatch(r"\d{6,10}", tn):
+        return "helthjem"
+    return None
+
+
 class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     MINOR_VERSION = 4
@@ -227,7 +246,13 @@ class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
                 parcel = await PostenTrackingClient(session).async_get_tracking(tracking_number)
                 carrier = CARRIER_POSTEN
             except PostenTrackingError:
-                errors["base"] = "cannot_connect"
+                carrier_hint = _guess_carrier_from_format(tracking_number)
+                if carrier_hint == "helthjem":
+                    errors["base"] = "helthjem_cannot_connect"
+                elif carrier_hint == "posten":
+                    errors["base"] = "cannot_connect"
+                else:
+                    errors["base"] = "unsupported_tracking_number"
             except Exception:
                 _LOGGER.exception("Unexpected error validating tracking number")
                 errors["base"] = "unknown"
