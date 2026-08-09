@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+
+- Added auto-remove delivered parcels: global settings now include an optional timer (hours) to automatically remove a parcel entry after it has been delivered. Set to 0 to disable (the default — existing behaviour is unchanged).
+- Tightened tracking-number format detection: the error shown when a number is unrecognised now defaults to the generic "unsupported carrier" message instead of confidently mis-naming Posten/Bring. Only the Bring-specific JD/JVNO letter prefixes are still classified as Posten.
+
 ## 1.1.0
 
 - Added Helthjem carrier support via GraphQL API (no authentication required).

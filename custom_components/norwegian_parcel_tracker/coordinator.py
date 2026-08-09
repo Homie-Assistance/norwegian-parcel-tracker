@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import logging
 from typing import Any
 
@@ -12,7 +12,11 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError, ParcelData
 from .const import (
+    CARRIER_HELTHJEM,
+    CARRIER_POSTEN,
+    CONF_AUTO_DELETE_DELIVERED_HOURS,
     CONF_CALENDAR_ENTITY,
+    CONF_CARRIER,
     CONF_CAR_ENABLED, CONF_CAR_H, CONF_CAR_L, CONF_CAR_W,
     CONF_CARRY_ENABLED, CONF_CARRY_H, CONF_CARRY_L, CONF_CARRY_W,
     CONF_CREATE_CALENDAR_EVENT,
@@ -31,9 +35,6 @@ from .const import (
     CONF_NOTIFY_TARGET,
     CONF_STALE_CRITICAL_HOURS,
     CONF_STALE_WARNING_HOURS,
-    CARRIER_HELTHJEM,
-    CARRIER_POSTEN,
-    CONF_CARRIER,
     CONF_TRACKING_NUMBER,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
@@ -151,6 +152,37 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         options = self._get_effective_options()
         await self._async_create_calendar_event(parcel, options)
         await self._async_send_notifications(parcel, options)
+        await self._async_handle_auto_delete(parcel)
+
+    async def _async_handle_auto_delete(self, parcel: ParcelData) -> None:
+        global_opts = self._get_global_options()
+        auto_delete_hours = int(global_opts.get(CONF_AUTO_DELETE_DELIVERED_HOURS, 0) or 0)
+        if not auto_delete_hours or not parcel.is_delivered:
+            return
+
+        delivered_at_str = self.entry.data.get("delivered_at")
+        if not delivered_at_str:
+            new_data = {**self.entry.data, "delivered_at": datetime.now(timezone.utc).isoformat()}
+            self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+            return
+
+        try:
+            delivered_at = datetime.fromisoformat(delivered_at_str)
+            if delivered_at.tzinfo is None:
+                delivered_at = delivered_at.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return
+
+        elapsed = datetime.now(timezone.utc) - delivered_at
+        if elapsed >= timedelta(hours=auto_delete_hours):
+            _LOGGER.info(
+                "Auto-removing delivered parcel %s after %.0f hours",
+                self.tracking_number,
+                elapsed.total_seconds() / 3600,
+            )
+            self.hass.async_create_task(
+                self.hass.config_entries.async_remove(self.entry.entry_id)
+            )
 
     async def _async_create_calendar_event(self, parcel: ParcelData, options: dict) -> None:
         if not options.get(CONF_CREATE_CALENDAR_EVENT):

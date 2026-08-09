@@ -32,13 +32,15 @@
           "default_notify_delivered": "Default: notify when parcel is delivered",
           "default_create_calendar_event": "Default: create calendar event for estimated delivery",
           "default_stale_warning_hours": "Default warning threshold — hours without movement",
-          "default_stale_critical_hours": "Default critical threshold — hours without movement"
+          "default_stale_critical_hours": "Default critical threshold — hours without movement",
+          "auto_delete_delivered_hours": "Auto-remove delivered parcels after (hours, 0 = never)"
         },
         "data_description": {
           "language": "Norwegian shows Posten's original text. English translates statuses and events to English.",
           "mailbox_enabled": "When enabled, the status sensor reports whether the parcel fits through your mailbox slot.",
           "car_enabled": "When enabled, the status sensor reports whether the parcel fits in your car boot.",
-          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand."
+          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand.",
+          "auto_delete_delivered_hours": "When set to a non-zero value, the integration will automatically remove a parcel entry this many hours after it is first detected as delivered. Set to 0 to keep delivered parcels forever."
         }
       }
     },
@@ -87,13 +89,15 @@
           "default_notify_delivered": "Default: notify when parcel is delivered",
           "default_create_calendar_event": "Default: create calendar event for estimated delivery",
           "default_stale_warning_hours": "Default warning threshold — hours without movement",
-          "default_stale_critical_hours": "Default critical threshold — hours without movement"
+          "default_stale_critical_hours": "Default critical threshold — hours without movement",
+          "auto_delete_delivered_hours": "Auto-remove delivered parcels after (hours, 0 = never)"
         },
         "data_description": {
           "language": "Norwegian shows Posten's original text. English translates statuses and events to English.",
           "mailbox_enabled": "When enabled, the status sensor reports whether the parcel fits through your mailbox slot.",
           "car_enabled": "When enabled, the status sensor reports whether the parcel fits in your car boot.",
-          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand."
+          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand.",
+          "auto_delete_delivered_hours": "When set to a non-zero value, the integration will automatically remove a parcel entry this many hours after it is first detected as delivered. Set to 0 to keep delivered parcels forever."
         }
       }
     }

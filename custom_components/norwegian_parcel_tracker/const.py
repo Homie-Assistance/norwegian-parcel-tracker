@@ -63,6 +63,10 @@ CONF_CARRIER = "carrier"
 CARRIER_POSTEN = "posten"
 CARRIER_HELTHJEM = "helthjem"
 
+# ── Auto-delete ────────────────────────────────────────────────────────────────
+CONF_AUTO_DELETE_DELIVERED_HOURS = "auto_delete_delivered_hours"
+DEFAULT_AUTO_DELETE_DELIVERED_HOURS = 0  # 0 = disabled
+
 # ── Misc ───────────────────────────────────────────────────────────────────────
 DEFAULT_SCAN_INTERVAL_MINUTES = 30
 CARD_REPO_URL = "https://github.com/Homie-Assistance/norwegian-parcel-tracker-card"

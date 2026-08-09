@@ -13,7 +13,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError
 from .const import (
+    CARRIER_HELTHJEM,
+    CARRIER_POSTEN,
+    CONF_AUTO_DELETE_DELIVERED_HOURS,
     CONF_CALENDAR_ENTITY,
+    CONF_CARRIER,
     CONF_CAR_ENABLED, CONF_CAR_H, CONF_CAR_L, CONF_CAR_W,
     CONF_CARRY_ENABLED, CONF_CARRY_H, CONF_CARRY_L, CONF_CARRY_W,
     CONF_CREATE_CALENDAR_EVENT,
@@ -33,10 +37,8 @@ from .const import (
     CONF_NOTIFY_TARGET,
     CONF_STALE_CRITICAL_HOURS,
     CONF_STALE_WARNING_HOURS,
-    CARRIER_HELTHJEM,
-    CARRIER_POSTEN,
-    CONF_CARRIER,
     CONF_TRACKING_NUMBER,
+    DEFAULT_AUTO_DELETE_DELIVERED_HOURS,
     DEFAULT_CAR_H, DEFAULT_CAR_L, DEFAULT_CAR_W,
     DEFAULT_CARRY_H, DEFAULT_CARRY_L, DEFAULT_CARRY_W,
     DEFAULT_MAILBOX_H, DEFAULT_MAILBOX_L, DEFAULT_MAILBOX_W,
@@ -130,6 +132,7 @@ def _build_global_schema(hass, opts: dict) -> vol.Schema:
         vol.Optional(CONF_DEFAULT_CREATE_CALENDAR_EVENT, default=bool(opts.get(CONF_DEFAULT_CREATE_CALENDAR_EVENT, False))): bool,
         vol.Optional(CONF_DEFAULT_STALE_WARNING_HOURS, default=float(opts.get(CONF_DEFAULT_STALE_WARNING_HOURS, 24))): _number_hours(240),
         vol.Optional(CONF_DEFAULT_STALE_CRITICAL_HOURS, default=float(opts.get(CONF_DEFAULT_STALE_CRITICAL_HOURS, 72))): _number_hours(720),
+        vol.Optional(CONF_AUTO_DELETE_DELIVERED_HOURS, default=int(opts.get(CONF_AUTO_DELETE_DELIVERED_HOURS, DEFAULT_AUTO_DELETE_DELIVERED_HOURS))): _number_hours(8760),
     }
 
     notify_key, notify_val = _optional_with_default(
@@ -146,20 +149,15 @@ def _build_global_schema(hass, opts: dict) -> vol.Schema:
 
 
 def _guess_carrier_from_format(tracking_number: str) -> str | None:
-    """Heuristic: return 'posten', 'helthjem', or None based on tracking number format."""
+    """Return 'posten' only for tracking-number formats that are distinctively Bring/Posten.
+
+    Deliberately conservative: the international postal format (RR123456789NO) is shared
+    by UPU members including PostNord, so it returns None rather than a confident but wrong
+    carrier name.  Only Bring's proprietary JD/JVNO letter prefixes are truly unambiguous.
+    """
     tn = re.sub(r"\s", "", tracking_number).upper()
-    # International postal: AA123456789NO (e.g. RR, EE, EV prefixes)
-    if re.fullmatch(r"[A-Z]{2}\d{8,9}[A-Z]{2}", tn):
+    if re.match(r"^(JD\d|JVNO\d|JV\d)", tn):
         return "posten"
-    # Bring/Posten letter prefixes
-    if re.match(r"^(JD|JVNO|JV|00)", tn):
-        return "posten"
-    # GS1-128 (18+ digits)
-    if re.fullmatch(r"\d{18,}", tn):
-        return "posten"
-    # Helthjem: short pure-numeric reference (6–10 digits)
-    if re.fullmatch(r"\d{6,10}", tn):
-        return "helthjem"
     return None
 
 
