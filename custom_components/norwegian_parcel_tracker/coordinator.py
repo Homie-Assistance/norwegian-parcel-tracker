@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError, ParcelData
 from .const import (
@@ -162,7 +163,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
 
         delivered_at_str = self.entry.data.get("delivered_at")
         if not delivered_at_str:
-            new_data = {**self.entry.data, "delivered_at": datetime.now(timezone.utc).isoformat()}
+            new_data = {**self.entry.data, "delivered_at": dt_util.utcnow().isoformat()}
             self.hass.config_entries.async_update_entry(self.entry, data=new_data)
             return
 
@@ -173,7 +174,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         except ValueError:
             return
 
-        elapsed = datetime.now(timezone.utc) - delivered_at
+        elapsed = dt_util.utcnow() - delivered_at
         if elapsed >= timedelta(hours=auto_delete_hours):
             _LOGGER.info(
                 "Auto-removing delivered parcel %s after %.0f hours",
