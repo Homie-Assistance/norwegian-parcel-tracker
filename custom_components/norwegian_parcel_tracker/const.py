@@ -67,6 +67,20 @@ CARRIER_HELTHJEM = "helthjem"
 CONF_AUTO_DELETE_DELIVERED_HOURS = "auto_delete_delivered_hours"
 DEFAULT_AUTO_DELETE_DELIVERED_HOURS = 0  # 0 = disabled
 
+# ── Email watcher ──────────────────────────────────────────────────────────────
+ENTRY_TYPE_EMAIL_WATCHER = "email_watcher"
+CONF_EMAIL_SERVER = "email_server"
+CONF_EMAIL_PORT = "email_port"
+CONF_EMAIL_USERNAME = "email_username"
+CONF_EMAIL_PASSWORD = "email_password"
+CONF_EMAIL_FOLDER = "email_folder"
+CONF_EMAIL_POLL_INTERVAL_MINUTES = "email_poll_interval_minutes"
+CONF_EMAIL_DAYS_BACK = "email_days_back"
+DEFAULT_EMAIL_PORT = 993
+DEFAULT_EMAIL_FOLDER = "INBOX"
+DEFAULT_EMAIL_POLL_INTERVAL_MINUTES = 15
+DEFAULT_EMAIL_DAYS_BACK = 30
+
 # ── Misc ───────────────────────────────────────────────────────────────────────
 DEFAULT_SCAN_INTERVAL_MINUTES = 30
 CARD_REPO_URL = "https://github.com/Homie-Assistance/norwegian-parcel-tracker-card"

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- Added autonomous email tracking number discovery: a new "Email watcher" entry type polls an IMAP mailbox (SSL, port 993) for order confirmation emails and automatically adds recognised tracking numbers via the existing `add_parcel` flow. No external dependencies — uses Python's built-in `imaplib`. Supports Gmail, Outlook, and any IMAP provider via app passwords. Seen email UIDs and attempted tracking numbers are persisted in HA storage so the integration survives restarts without re-processing old emails.
+- The integration now shows a menu when adding a second entry ("Add parcel" vs "Set up email watcher").
+- Email watcher credentials and settings (server, port, username, password, folder, poll interval, days-back) are editable via the Configure button.
+
 ## 1.2.2
 
 - Added auto-remove delivered parcels: global settings now include an optional timer (hours) to automatically remove a parcel entry after it has been delivered. Set to 0 to disable (the default — existing behaviour is unchanged).

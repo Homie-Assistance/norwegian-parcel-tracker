@@ -6,8 +6,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 
-from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_GLOBAL, GLOBAL_ENTRY_UNIQUE_ID
+from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_EMAIL_WATCHER, ENTRY_TYPE_GLOBAL, GLOBAL_ENTRY_UNIQUE_ID
 from .coordinator import PostenTrackingCoordinator
+from .email_watcher import EmailWatcherCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +42,15 @@ def _async_maybe_create_global_entry(hass: HomeAssistant) -> None:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
-    if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
+    entry_type = entry.data.get(CONF_ENTRY_TYPE)
+
+    if entry_type == ENTRY_TYPE_GLOBAL:
+        return True
+
+    if entry_type == ENTRY_TYPE_EMAIL_WATCHER:
+        coordinator = EmailWatcherCoordinator(hass, entry)
+        await coordinator.async_config_entry_first_refresh()
+        hass.data[DOMAIN][entry.entry_id] = coordinator
         return True
 
     coordinator = PostenTrackingCoordinator(hass, entry)
@@ -54,8 +63,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
+    entry_type = entry.data.get(CONF_ENTRY_TYPE)
+
+    if entry_type in (ENTRY_TYPE_GLOBAL, ENTRY_TYPE_EMAIL_WATCHER):
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         return True
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)

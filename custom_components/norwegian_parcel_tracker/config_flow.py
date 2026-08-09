@@ -29,6 +29,13 @@ from .const import (
     CONF_DEFAULT_STALE_CRITICAL_HOURS,
     CONF_DEFAULT_STALE_WARNING_HOURS,
     CONF_DISPLAY_NAME,
+    CONF_EMAIL_DAYS_BACK,
+    CONF_EMAIL_FOLDER,
+    CONF_EMAIL_PASSWORD,
+    CONF_EMAIL_POLL_INTERVAL_MINUTES,
+    CONF_EMAIL_PORT,
+    CONF_EMAIL_SERVER,
+    CONF_EMAIL_USERNAME,
     CONF_ENTRY_TYPE,
     CONF_LANGUAGE,
     CONF_MAILBOX_ENABLED, CONF_MAILBOX_H, CONF_MAILBOX_L, CONF_MAILBOX_W,
@@ -41,8 +48,13 @@ from .const import (
     DEFAULT_AUTO_DELETE_DELIVERED_HOURS,
     DEFAULT_CAR_H, DEFAULT_CAR_L, DEFAULT_CAR_W,
     DEFAULT_CARRY_H, DEFAULT_CARRY_L, DEFAULT_CARRY_W,
+    DEFAULT_EMAIL_DAYS_BACK,
+    DEFAULT_EMAIL_FOLDER,
+    DEFAULT_EMAIL_POLL_INTERVAL_MINUTES,
+    DEFAULT_EMAIL_PORT,
     DEFAULT_MAILBOX_H, DEFAULT_MAILBOX_L, DEFAULT_MAILBOX_W,
     DOMAIN,
+    ENTRY_TYPE_EMAIL_WATCHER,
     ENTRY_TYPE_GLOBAL,
     ENTRY_TYPE_PARCEL,
     GLOBAL_ENTRY_UNIQUE_ID,
@@ -148,6 +160,67 @@ def _build_global_schema(hass, opts: dict) -> vol.Schema:
     return vol.Schema(schema_items)
 
 
+def _normalise_email_opts(user_input: dict[str, Any]) -> dict[str, Any]:
+    return {
+        CONF_EMAIL_SERVER: str(user_input[CONF_EMAIL_SERVER]).strip(),
+        CONF_EMAIL_PORT: int(user_input.get(CONF_EMAIL_PORT, DEFAULT_EMAIL_PORT)),
+        CONF_EMAIL_USERNAME: str(user_input[CONF_EMAIL_USERNAME]).strip(),
+        CONF_EMAIL_PASSWORD: str(user_input[CONF_EMAIL_PASSWORD]),
+        CONF_EMAIL_FOLDER: str(user_input.get(CONF_EMAIL_FOLDER, DEFAULT_EMAIL_FOLDER)).strip() or DEFAULT_EMAIL_FOLDER,
+        CONF_EMAIL_POLL_INTERVAL_MINUTES: int(user_input.get(CONF_EMAIL_POLL_INTERVAL_MINUTES, DEFAULT_EMAIL_POLL_INTERVAL_MINUTES)),
+        CONF_EMAIL_DAYS_BACK: int(user_input.get(CONF_EMAIL_DAYS_BACK, DEFAULT_EMAIL_DAYS_BACK)),
+    }
+
+
+def _build_email_schema(opts: dict[str, Any]) -> vol.Schema:
+    return vol.Schema({
+        vol.Required(CONF_EMAIL_SERVER, default=opts.get(CONF_EMAIL_SERVER, "")): str,
+        vol.Optional(CONF_EMAIL_PORT, default=int(opts.get(CONF_EMAIL_PORT, DEFAULT_EMAIL_PORT))): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=1, max=65535, step=1, mode=selector.NumberSelectorMode.BOX)
+        ),
+        vol.Required(CONF_EMAIL_USERNAME, default=opts.get(CONF_EMAIL_USERNAME, "")): str,
+        vol.Required(CONF_EMAIL_PASSWORD, default=opts.get(CONF_EMAIL_PASSWORD, "")): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+        vol.Optional(CONF_EMAIL_FOLDER, default=opts.get(CONF_EMAIL_FOLDER, DEFAULT_EMAIL_FOLDER)): str,
+        vol.Optional(CONF_EMAIL_POLL_INTERVAL_MINUTES, default=int(opts.get(CONF_EMAIL_POLL_INTERVAL_MINUTES, DEFAULT_EMAIL_POLL_INTERVAL_MINUTES))): _number_hours(1440),
+        vol.Optional(CONF_EMAIL_DAYS_BACK, default=int(opts.get(CONF_EMAIL_DAYS_BACK, DEFAULT_EMAIL_DAYS_BACK))): selector.NumberSelector(
+            selector.NumberSelectorConfig(min=1, max=365, step=1, unit_of_measurement="days", mode=selector.NumberSelectorMode.BOX)
+        ),
+    })
+
+
+async def _async_validate_imap(hass: Any, user_input: dict[str, Any]) -> dict[str, str]:
+    import imaplib as _imaplib
+    server = str(user_input.get(CONF_EMAIL_SERVER, "")).strip()
+    port = int(user_input.get(CONF_EMAIL_PORT, DEFAULT_EMAIL_PORT))
+    username = str(user_input.get(CONF_EMAIL_USERNAME, "")).strip()
+    password = str(user_input.get(CONF_EMAIL_PASSWORD, ""))
+    folder = str(user_input.get(CONF_EMAIL_FOLDER, DEFAULT_EMAIL_FOLDER)).strip() or DEFAULT_EMAIL_FOLDER
+
+    if not server:
+        return {"base": "email_server_required"}
+    if not username:
+        return {"base": "email_username_required"}
+
+    def _try_connect() -> str | None:
+        try:
+            conn = _imaplib.IMAP4_SSL(server, port)
+            conn.login(username, password)
+            status, _ = conn.select(folder, readonly=True)
+            conn.logout()
+            if status != "OK":
+                return "email_folder_not_found"
+            return None
+        except _imaplib.IMAP4.error:
+            return "invalid_auth"
+        except OSError:
+            return "cannot_connect"
+
+    error_key = await hass.async_add_executor_job(_try_connect)
+    return {"base": error_key} if error_key else {}
+
+
 def _guess_carrier_from_format(tracking_number: str) -> str | None:
     """Return 'posten' only for tracking-number formats that are distinctively Bring/Posten.
 
@@ -182,6 +255,13 @@ class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
         # First-time setup: show global settings before the parcel form
         if not self._global_setup_done and not self._has_global_entry():
             return await self.async_step_global()
+        # Once global entry exists, offer a choice between parcel and email watcher
+        return self.async_show_menu(
+            step_id="user",
+            menu_options={"add_parcel": "Add parcel", "email_watcher": "Set up email watcher"},
+        )
+
+    async def async_step_add_parcel(self, user_input: dict[str, Any] | None = None):
         return await self._async_show_parcel_form()
 
     async def async_step_global(self, user_input: dict[str, Any] | None = None):
@@ -271,11 +351,35 @@ class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
 
         return await self._async_show_parcel_form(errors)
 
+    async def async_step_email_watcher(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = await _async_validate_imap(self.hass, user_input)
+            if not errors:
+                username = str(user_input[CONF_EMAIL_USERNAME]).strip()
+                server = str(user_input[CONF_EMAIL_SERVER]).strip()
+                await self.async_set_unique_id(f"email_{username}@{server}")
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=f"Email watcher — {username}",
+                    data={CONF_ENTRY_TYPE: ENTRY_TYPE_EMAIL_WATCHER},
+                    options=_normalise_email_opts(user_input),
+                )
+
+        return self.async_show_form(
+            step_id="email_watcher",
+            data_schema=_build_email_schema({}),
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
         if config_entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
             return NorwegianParcelTrackerGlobalOptionsFlow(config_entry)
+        if config_entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_EMAIL_WATCHER:
+            return NorwegianParcelTrackerEmailWatcherOptionsFlow(config_entry)
         return NorwegianParcelTrackerOptionsFlow(config_entry)
 
 
@@ -349,4 +453,27 @@ class NorwegianParcelTrackerOptionsFlow(config_entries.OptionsFlow):
                     "not update immediately."
                 )
             },
+        )
+
+
+class NorwegianParcelTrackerEmailWatcherOptionsFlow(config_entries.OptionsFlow):
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self._config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        return await self.async_step_email_settings(user_input)
+
+    async def async_step_email_settings(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = await _async_validate_imap(self.hass, user_input)
+            if not errors:
+                return self.async_create_entry(title="", data=_normalise_email_opts(user_input))
+
+        opts = dict(self._config_entry.options)
+        return self.async_show_form(
+            step_id="email_settings",
+            data_schema=_build_email_schema(opts),
+            errors=errors,
         )
