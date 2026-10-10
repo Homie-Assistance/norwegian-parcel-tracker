@@ -51,7 +51,7 @@
       },
       "email_watcher": {
         "title": "Set up email watcher",
-        "description": "Connect an IMAP mailbox. The integration will scan for order confirmation emails and automatically add recognised tracking numbers. Use an app password (not your regular account password) for Gmail and Microsoft accounts.",
+        "description": "Connect an IMAP mailbox. The integration will scan for order confirmation emails and add recognised tracking numbers. Use an app password (not your regular account password) for Gmail and Microsoft accounts.",
         "data": {
           "email_server": "IMAP server",
           "email_port": "Port",
@@ -59,7 +59,8 @@
           "email_password": "Password / app password",
           "email_folder": "Mailbox folder",
           "email_poll_interval_minutes": "Poll interval (minutes)",
-          "email_days_back": "Scan emails from the last N days"
+          "email_days_back": "Scan emails from the last N days",
+          "email_auto_add": "Automatically add found tracking numbers"
         },
         "data_description": {
           "email_server": "Your mail provider's IMAP server. Examples: imap.gmail.com, outlook.office365.com.",
@@ -67,8 +68,14 @@
           "email_password": "For Gmail and Microsoft accounts, create an app password — your normal account password will not work with IMAP.",
           "email_folder": "The mailbox folder to scan. Leave as INBOX to scan your inbox.",
           "email_poll_interval_minutes": "How often to check for new emails. 15 minutes is a good default.",
-          "email_days_back": "On first start, emails this many days back are scanned. Subsequent polls only look at new emails."
+          "email_days_back": "On first start, emails this many days back are scanned. Subsequent polls only look at new emails.",
+          "email_auto_add": "When off (default), found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting."
         }
+      },
+      "confirm_discovery": {
+        "title": "Add parcel found in email?",
+        "description": "The email watcher found tracking number **{tracking_number}**. Add it as a tracked parcel?",
+        "data": {}
       }
     },
     "error": {
@@ -142,7 +149,8 @@
           "email_password": "Password / app password",
           "email_folder": "Mailbox folder",
           "email_poll_interval_minutes": "Poll interval (minutes)",
-          "email_days_back": "Scan emails from the last N days"
+          "email_days_back": "Scan emails from the last N days",
+          "email_auto_add": "Automatically add found tracking numbers"
         },
         "data_description": {
           "email_server": "Your mail provider's IMAP server. Examples: imap.gmail.com, outlook.office365.com.",
@@ -150,7 +158,8 @@
           "email_password": "For Gmail and Microsoft accounts, use an app password — your normal account password will not work with IMAP.",
           "email_folder": "The mailbox folder to scan. Leave as INBOX to scan your inbox.",
           "email_poll_interval_minutes": "How often to check for new emails.",
-          "email_days_back": "Emails this many days back are included. Only new (unseen) emails are processed."
+          "email_days_back": "Emails this many days back are included. Only new (unseen) emails are processed.",
+          "email_auto_add": "When off, found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting."
         }
       }
     },

@@ -80,6 +80,8 @@ DEFAULT_EMAIL_PORT = 993
 DEFAULT_EMAIL_FOLDER = "INBOX"
 DEFAULT_EMAIL_POLL_INTERVAL_MINUTES = 15
 DEFAULT_EMAIL_DAYS_BACK = 30
+CONF_EMAIL_AUTO_ADD = "email_auto_add"
+DEFAULT_EMAIL_AUTO_ADD = False  # approval mode by default
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 DEFAULT_SCAN_INTERVAL_MINUTES = 30

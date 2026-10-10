@@ -10,12 +10,13 @@ from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, SOURCE_INTEGRATION_DISCOVERY
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    CONF_EMAIL_AUTO_ADD,
     CONF_EMAIL_DAYS_BACK,
     CONF_EMAIL_FOLDER,
     CONF_EMAIL_PASSWORD,
@@ -23,6 +24,7 @@ from .const import (
     CONF_EMAIL_PORT,
     CONF_EMAIL_SERVER,
     CONF_EMAIL_USERNAME,
+    DEFAULT_EMAIL_AUTO_ADD,
     DEFAULT_EMAIL_DAYS_BACK,
     DEFAULT_EMAIL_FOLDER,
     DEFAULT_EMAIL_POLL_INTERVAL_MINUTES,
@@ -159,6 +161,7 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self._seen_uids: set[str] = set()
         self._seen_tracking_numbers: set[str] = set()
+        self._pending_tracking_numbers: set[str] = set()
         self._uidvalidity: str | None = None
         self._store_loaded: bool = False
         self._store: Store = Store(
@@ -185,6 +188,7 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if isinstance(stored, dict):
             self._seen_uids = set(stored.get("seen_uids", []))
             self._seen_tracking_numbers = set(stored.get("seen_tracking_numbers", []))
+            self._pending_tracking_numbers = set(stored.get("pending_tracking_numbers", []))
             self._uidvalidity = stored.get("uidvalidity")
         self._store_loaded = True
 
@@ -192,6 +196,7 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self._store.async_save({
             "seen_uids": list(self._seen_uids),
             "seen_tracking_numbers": list(self._seen_tracking_numbers),
+            "pending_tracking_numbers": list(self._pending_tracking_numbers),
             "uidvalidity": self._uidvalidity,
         })
 
@@ -207,9 +212,22 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         password = str(cfg.get(CONF_EMAIL_PASSWORD, ""))
         folder = str(cfg.get(CONF_EMAIL_FOLDER, DEFAULT_EMAIL_FOLDER))
         days_back = int(cfg.get(CONF_EMAIL_DAYS_BACK, DEFAULT_EMAIL_DAYS_BACK))
+        auto_add = bool(cfg.get(CONF_EMAIL_AUTO_ADD, DEFAULT_EMAIL_AUTO_ADD))
 
         if not server or not username or not password:
             raise UpdateFailed("Email watcher not fully configured")
+
+        # Promotion: move pending numbers to seen if the user approved them (parcel entry now exists)
+        if self._pending_tracking_numbers:
+            configured_uids = {
+                e.unique_id
+                for e in self.hass.config_entries.async_entries(DOMAIN)
+                if e.unique_id
+            }
+            for tn in list(self._pending_tracking_numbers):
+                if tn.upper() in configured_uids:
+                    self._pending_tracking_numbers.discard(tn)
+                    self._seen_tracking_numbers.add(tn)
 
         try:
             raw_numbers, all_uids, uidvalidity = await self.hass.async_add_executor_job(
@@ -228,13 +246,15 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 folder, self._uidvalidity, uidvalidity,
             )
 
-        # Replace seen_uids with only UIDs currently in the window. This prunes UIDs
-        # from messages that have aged out of the days_back window, keeping the stored
-        # set bounded to the size of the current inbox window.
+        # Prune seen_uids to only current window UIDs (bounds the stored set)
         self._seen_uids = set(all_uids)
         self._uidvalidity = uidvalidity
 
-        new_numbers = [tn for tn in raw_numbers if tn not in self._seen_tracking_numbers]
+        new_numbers = [
+            tn for tn in raw_numbers
+            if tn not in self._seen_tracking_numbers
+            and tn not in self._pending_tracking_numbers
+        ]
         unique_new: list[str] = []
         seen_this_poll: set[str] = set()
         for tn in new_numbers:
@@ -251,41 +271,113 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             unique_new = unique_new[:_MAX_NEW_PER_POLL]
 
         added: list[str] = []
+        discovered: list[str] = []
+
         for tn in unique_new:
-            self._seen_tracking_numbers.add(tn)
-            try:
-                result = await self.hass.config_entries.flow.async_init(
-                    DOMAIN,
-                    context={"source": "user"},
-                    data={"tracking_number": tn},
-                )
-                if result.get("type") == "create_entry":
-                    added.append(tn)
-                    _LOGGER.info("Email watcher auto-added parcel %s", tn)
-                elif result.get("type") == "abort":
-                    _LOGGER.debug(
-                        "Email watcher skipped %s (reason: %s)",
-                        tn,
-                        result.get("reason", "unknown"),
+            if auto_add:
+                self._seen_tracking_numbers.add(tn)
+                try:
+                    result = await self.hass.config_entries.flow.async_init(
+                        DOMAIN,
+                        context={"source": "user"},
+                        data={"tracking_number": tn},
                     )
-                else:
-                    # "form" means the carrier API rejected the number. Abort the
-                    # in-progress flow so it does not accumulate in the flow manager.
-                    flow_id = result.get("flow_id")
-                    if flow_id:
-                        try:
-                            await self.hass.config_entries.flow.async_abort(flow_id)
-                        except Exception:
-                            pass
-                    _LOGGER.debug(
-                        "Email watcher: %s not recognised as a valid tracking number", tn
+                    if result.get("type") == "create_entry":
+                        added.append(tn)
+                        _LOGGER.info("Email watcher auto-added parcel %s", tn)
+                    elif result.get("type") == "abort":
+                        _LOGGER.debug(
+                            "Email watcher skipped %s (reason: %s)",
+                            tn, result.get("reason", "unknown"),
+                        )
+                    else:
+                        # "form" — carrier API rejected the number; abort the stale flow
+                        flow_id = result.get("flow_id")
+                        if flow_id:
+                            try:
+                                await self.hass.config_entries.flow.async_abort(flow_id)
+                            except Exception:
+                                pass
+                        _LOGGER.debug(
+                            "Email watcher: %s not recognised as a valid tracking number", tn
+                        )
+                except Exception:
+                    _LOGGER.debug("Email watcher could not add %s", tn, exc_info=True)
+            else:
+                # Approval mode — queue for user review via a discovery config flow
+                self._pending_tracking_numbers.add(tn)
+                discovered.append(tn)
+                try:
+                    await self.hass.config_entries.flow.async_init(
+                        DOMAIN,
+                        context={
+                            "source": SOURCE_INTEGRATION_DISCOVERY,
+                            "tracking_number": tn,
+                        },
+                        data={"tracking_number": tn},
                     )
-            except Exception:
-                _LOGGER.debug("Email watcher could not add %s", tn, exc_info=True)
+                except Exception:
+                    _LOGGER.debug(
+                        "Email watcher could not queue discovery flow for %s", tn, exc_info=True
+                    )
+
+        # Recreate discovery flows for previously pending numbers that lost their flow
+        # (e.g. after HA restart) so they remain visible in the integrations UI.
+        if not auto_add and self._pending_tracking_numbers:
+            active_flow_tns = {
+                flow.get("context", {}).get("tracking_number")
+                for flow in self.hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+            }
+            for tn in list(self._pending_tracking_numbers):
+                if tn not in active_flow_tns and tn not in discovered:
+                    try:
+                        await self.hass.config_entries.flow.async_init(
+                            DOMAIN,
+                            context={
+                                "source": SOURCE_INTEGRATION_DISCOVERY,
+                                "tracking_number": tn,
+                            },
+                            data={"tracking_number": tn},
+                        )
+                    except Exception:
+                        _LOGGER.debug(
+                            "Email watcher could not recreate discovery flow for %s", tn, exc_info=True
+                        )
 
         await self._async_save_store()
+
+        if auto_add and added:
+            await self.hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": "Norwegian Parcel Tracker",
+                    "message": (
+                        f"Email watcher automatically added {len(added)} parcel(s): "
+                        + ", ".join(f"**{tn}**" for tn in added)
+                        + "."
+                    ),
+                    "notification_id": f"npt_email_added_{self.entry.entry_id}",
+                },
+            )
+
+        if not auto_add and discovered:
+            await self.hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": "Norwegian Parcel Tracker",
+                    "message": (
+                        f"Email watcher found {len(discovered)} new tracking number(s) "
+                        f"awaiting your approval. "
+                        f"Open [Settings → Integrations](/config/integrations) to add or ignore them."
+                    ),
+                    "notification_id": f"npt_email_pending_{self.entry.entry_id}",
+                },
+            )
 
         return {
             "scanned_uids": len(all_uids),
             "new_tracking_numbers": added,
+            "pending_tracking_numbers": list(self._pending_tracking_numbers),
         }

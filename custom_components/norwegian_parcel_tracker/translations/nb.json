@@ -51,7 +51,7 @@
       },
       "email_watcher": {
         "title": "Sett opp e-postvokter",
-        "description": "Koble til en IMAP-postkasse. Integrasjonen søker gjennom ordrebekreftelser og legger automatisk til gjenkjente sporingsnumre. Bruk et app-passord (ikke ditt vanlige kontopassord) for Gmail og Microsoft-kontoer.",
+        "description": "Koble til en IMAP-postkasse. Integrasjonen søker gjennom ordrebekreftelser og legger til gjenkjente sporingsnumre. Bruk et app-passord (ikke ditt vanlige kontopassord) for Gmail og Microsoft-kontoer.",
         "data": {
           "email_server": "IMAP-server",
           "email_port": "Port",
@@ -59,7 +59,8 @@
           "email_password": "Passord / app-passord",
           "email_folder": "Postmappe",
           "email_poll_interval_minutes": "Søkeintervall (minutter)",
-          "email_days_back": "Søk i e-post fra de siste N dagene"
+          "email_days_back": "Søk i e-post fra de siste N dagene",
+          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages"
         },
         "data_description": {
           "email_server": "IMAP-serveren til e-postleverandøren din. Eksempler: imap.gmail.com, outlook.office365.com.",
@@ -67,8 +68,14 @@
           "email_password": "For Gmail og Microsoft-kontoer må du opprette et app-passord — ditt vanlige kontopassord fungerer ikke med IMAP.",
           "email_folder": "Postmappen som skal søkes. La stå som INBOX for å søke i innboksen.",
           "email_poll_interval_minutes": "Hvor ofte nye e-poster sjekkes. 15 minutter er et godt utgangspunkt.",
-          "email_days_back": "Ved første oppstart søkes det gjennom e-post fra de siste N dagene. Etterfølgende søk behandler bare nye e-poster."
+          "email_days_back": "Ved første oppstart søkes det gjennom e-post fra de siste N dagene. Etterfølgende søk behandler bare nye e-poster.",
+          "email_auto_add": "Når av (standard) vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse."
         }
+      },
+      "confirm_discovery": {
+        "title": "Legg til pakke funnet i e-post?",
+        "description": "E-postvokteren fant sporingsnummeret **{tracking_number}**. Legge det til som en sporet pakke?",
+        "data": {}
       }
     },
     "error": {
@@ -142,7 +149,8 @@
           "email_password": "Passord / app-passord",
           "email_folder": "Postmappe",
           "email_poll_interval_minutes": "Søkeintervall (minutter)",
-          "email_days_back": "Søk i e-post fra de siste N dagene"
+          "email_days_back": "Søk i e-post fra de siste N dagene",
+          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages"
         },
         "data_description": {
           "email_server": "IMAP-serveren til e-postleverandøren din. Eksempler: imap.gmail.com, outlook.office365.com.",
@@ -150,7 +158,8 @@
           "email_password": "For Gmail og Microsoft-kontoer, bruk et app-passord — ditt vanlige kontopassord fungerer ikke med IMAP.",
           "email_folder": "Postmappen som skal søkes. La stå som INBOX for å søke i innboksen.",
           "email_poll_interval_minutes": "Hvor ofte nye e-poster sjekkes.",
-          "email_days_back": "E-post fra de siste N dagene inkluderes. Bare nye (ubehandlede) e-poster behandles."
+          "email_days_back": "E-post fra de siste N dagene inkluderes. Bare nye (ubehandlede) e-poster behandles.",
+          "email_auto_add": "Når av vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse."
         }
       }
     },

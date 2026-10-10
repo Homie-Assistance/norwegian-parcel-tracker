@@ -29,6 +29,7 @@ from .const import (
     CONF_DEFAULT_STALE_CRITICAL_HOURS,
     CONF_DEFAULT_STALE_WARNING_HOURS,
     CONF_DISPLAY_NAME,
+    CONF_EMAIL_AUTO_ADD,
     CONF_EMAIL_DAYS_BACK,
     CONF_EMAIL_FOLDER,
     CONF_EMAIL_PASSWORD,
@@ -48,6 +49,7 @@ from .const import (
     DEFAULT_AUTO_DELETE_DELIVERED_HOURS,
     DEFAULT_CAR_H, DEFAULT_CAR_L, DEFAULT_CAR_W,
     DEFAULT_CARRY_H, DEFAULT_CARRY_L, DEFAULT_CARRY_W,
+    DEFAULT_EMAIL_AUTO_ADD,
     DEFAULT_EMAIL_DAYS_BACK,
     DEFAULT_EMAIL_FOLDER,
     DEFAULT_EMAIL_POLL_INTERVAL_MINUTES,
@@ -169,6 +171,7 @@ def _normalise_email_opts(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_EMAIL_FOLDER: str(user_input.get(CONF_EMAIL_FOLDER, DEFAULT_EMAIL_FOLDER)).strip() or DEFAULT_EMAIL_FOLDER,
         CONF_EMAIL_POLL_INTERVAL_MINUTES: int(user_input.get(CONF_EMAIL_POLL_INTERVAL_MINUTES, DEFAULT_EMAIL_POLL_INTERVAL_MINUTES)),
         CONF_EMAIL_DAYS_BACK: int(user_input.get(CONF_EMAIL_DAYS_BACK, DEFAULT_EMAIL_DAYS_BACK)),
+        CONF_EMAIL_AUTO_ADD: bool(user_input.get(CONF_EMAIL_AUTO_ADD, DEFAULT_EMAIL_AUTO_ADD)),
     }
 
 
@@ -187,6 +190,7 @@ def _build_email_schema(opts: dict[str, Any]) -> vol.Schema:
         vol.Optional(CONF_EMAIL_DAYS_BACK, default=int(opts.get(CONF_EMAIL_DAYS_BACK, DEFAULT_EMAIL_DAYS_BACK))): selector.NumberSelector(
             selector.NumberSelectorConfig(min=1, max=365, step=1, unit_of_measurement="days", mode=selector.NumberSelectorMode.BOX)
         ),
+        vol.Optional(CONF_EMAIL_AUTO_ADD, default=bool(opts.get(CONF_EMAIL_AUTO_ADD, DEFAULT_EMAIL_AUTO_ADD))): bool,
     })
 
 
@@ -350,6 +354,27 @@ class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
             )
 
         return await self._async_show_parcel_form(errors)
+
+    async def async_step_integration_discovery(self, discovery_info: dict[str, Any]):
+        """Handle a tracking number queued for approval by the email watcher."""
+        tracking_number = str(discovery_info.get("tracking_number", "")).upper()
+        if not tracking_number:
+            return self.async_abort(reason="no_tracking_number")
+        await self.async_set_unique_id(tracking_number)
+        self._abort_if_unique_id_configured()
+        self.context["tracking_number"] = tracking_number
+        return await self.async_step_confirm_discovery()
+
+    async def async_step_confirm_discovery(self, user_input: dict[str, Any] | None = None):
+        """Confirm or ignore a tracking number found by the email watcher."""
+        tracking_number = self.context.get("tracking_number", "")
+        if user_input is not None:
+            return await self._async_validate_parcel({CONF_TRACKING_NUMBER: tracking_number})
+        return self.async_show_form(
+            step_id="confirm_discovery",
+            description_placeholders={"tracking_number": tracking_number},
+            data_schema=vol.Schema({}),
+        )
 
     async def async_step_email_watcher(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
