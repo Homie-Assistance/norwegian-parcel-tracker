@@ -188,6 +188,8 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
     async def _async_create_calendar_event(self, parcel: ParcelData, options: dict) -> None:
         if not options.get(CONF_CREATE_CALENDAR_EVENT):
             return
+        if parcel.is_delivered:
+            return
 
         calendar_entity = options.get(CONF_CALENDAR_ENTITY)
         eta = parcel.estimated_delivery_iso
