@@ -12,16 +12,21 @@ from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_EMAIL_WATCHER, ENTRY_TYPE
 from .coordinator import PostenTrackingCoordinator
 from .email_watcher import EmailWatcherCoordinator
 from .event_history import ParcelEventHistory
+from .geocoder import NominatimGeocoder
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "button"]
+PLATFORMS = ["sensor", "button", "device_tracker"]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    if "_geocoder" not in hass.data[DOMAIN]:
+        geocoder = NominatimGeocoder(hass)
+        await geocoder.async_load()
+        hass.data[DOMAIN]["_geocoder"] = geocoder
     await _async_register_services(hass)
     _async_maybe_create_global_entry(hass)
     return True

@@ -7,11 +7,15 @@ from unittest.mock import MagicMock
 # Stub homeassistant and voluptuous so api.py can be imported without a full HA install
 for mod in [
     "homeassistant",
+    "homeassistant.components",
+    "homeassistant.components.device_tracker",
     "homeassistant.config_entries",
     "homeassistant.core",
     "homeassistant.helpers",
     "homeassistant.helpers.config_validation",
     "homeassistant.helpers.aiohttp_client",
+    "homeassistant.helpers.device_registry",
+    "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.selector",
     "homeassistant.helpers.storage",
     "homeassistant.util",

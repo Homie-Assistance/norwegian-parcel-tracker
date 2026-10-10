@@ -186,6 +186,9 @@
     },
     "button": {
       "order_home_delivery": { "name": "Bestill hjemlevering" }
+    },
+    "device_tracker": {
+      "location": { "name": "Posisjon" }
     }
   },
   "services": {

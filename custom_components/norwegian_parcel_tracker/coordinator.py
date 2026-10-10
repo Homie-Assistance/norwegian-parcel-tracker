@@ -13,6 +13,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError, ParcelData
 from .event_history import DeliveryStatsStore, ParcelEventHistory
+from .geocoder import NominatimGeocoder
 from .const import (
     CARRIER_HELTHJEM,
     CARRIER_POSTEN,
@@ -67,6 +68,8 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._refreshing: bool = False
         self._history = ParcelEventHistory(hass, entry.entry_id)
         self._stats = DeliveryStatsStore(hass)
+        self._location_coords: tuple[float, float] | None = None
+        self._last_geocoded_key: str | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -156,6 +159,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._history.merge(parcel.events)
         await self._history.async_save()
         await self._async_handle_side_effects(parcel)
+        await self._async_update_geocode(parcel)
         return parcel
 
     async def _async_handle_side_effects(self, parcel: ParcelData) -> None:
@@ -175,6 +179,24 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             first_event_time=self._history.first_event_time(),
             delivered_time=delivered_time,
         )
+
+    async def _async_update_geocode(self, parcel: ParcelData) -> None:
+        latest = parcel.latest_event
+        if not latest:
+            return
+        raw = latest.raw or {}
+        postal = raw.get("postalCode") or ""
+        city = raw.get("city") or (latest.location or "").split()[-1] if latest.location else ""
+        country = raw.get("countryCode") or "NO"
+        key = f"{country}|{postal}|{city}".lower()
+        if key == self._last_geocoded_key or not (postal or city):
+            return
+        geocoder: NominatimGeocoder | None = self.hass.data.get(DOMAIN, {}).get("_geocoder")
+        if geocoder is None:
+            return
+        coords = await geocoder.geocode(postal or None, city or None, country)
+        self._last_geocoded_key = key
+        self._location_coords = coords
 
     async def _async_handle_auto_delete(self, parcel: ParcelData) -> None:
         global_opts = self._get_global_options()
