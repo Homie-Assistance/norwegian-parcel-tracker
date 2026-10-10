@@ -10,4 +10,15 @@ add_parcel:
         text:
 
 refresh:
-  fields: {}
+  fields:
+    tracking_number:
+      required: false
+      selector:
+        text:
+
+remove_parcel:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:

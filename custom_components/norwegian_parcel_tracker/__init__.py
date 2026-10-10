@@ -89,15 +89,32 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         )
 
     async def refresh(call):
+        tracking_filter = str(call.data.get("tracking_number") or "").strip().upper()
         coordinators = [
             v for v in hass.data.get(DOMAIN, {}).values()
             if hasattr(v, "_refreshing")
         ]
+        if tracking_filter:
+            coordinators = [
+                c for c in coordinators
+                if getattr(c, "tracking_number", "").upper() == tracking_filter
+            ]
         for coordinator in coordinators:
             coordinator._refreshing = True
             coordinator.async_update_listeners()
         for coordinator in coordinators:
             await coordinator.async_request_refresh()
 
+    async def remove_parcel(call):
+        tracking_number = str(call.data.get("tracking_number") or "").strip().upper()
+        if not tracking_number:
+            return
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if (entry.unique_id or "").upper() == tracking_number:
+                await hass.config_entries.async_remove(entry.entry_id)
+                return
+        _LOGGER.warning("remove_parcel: no entry found for tracking number %s", tracking_number)
+
     hass.services.async_register(DOMAIN, "add_parcel", add_parcel)
     hass.services.async_register(DOMAIN, "refresh", refresh)
+    hass.services.async_register(DOMAIN, "remove_parcel", remove_parcel)

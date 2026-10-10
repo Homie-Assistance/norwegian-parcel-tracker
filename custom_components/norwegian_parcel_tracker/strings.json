@@ -202,6 +202,26 @@
           "description": "Optional friendly name shown in the integration list."
         }
       }
+    },
+    "refresh": {
+      "name": "Refresh",
+      "description": "Immediately polls for updated tracking data. If tracking_number is omitted, refreshes all parcels.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Optional — refresh only this parcel. Leave blank to refresh all."
+        }
+      }
+    },
+    "remove_parcel": {
+      "name": "Remove parcel",
+      "description": "Removes a parcel entry from the integration.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel to remove."
+        }
+      }
     }
   }
 }

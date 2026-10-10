@@ -202,6 +202,26 @@
           "description": "Valgfritt navn som vises i integrasjonslisten."
         }
       }
+    },
+    "refresh": {
+      "name": "Oppdater",
+      "description": "Henter umiddelbart oppdatert sporingsinformasjon. Hvis sporingsnummer utelates, oppdateres alle pakker.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Valgfritt — oppdater bare denne pakken. La stå tom for å oppdatere alle."
+        }
+      }
+    },
+    "remove_parcel": {
+      "name": "Fjern pakke",
+      "description": "Fjerner en pakkeoppføring fra integrasjonen.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken som skal fjernes."
+        }
+      }
     }
   }
 }
