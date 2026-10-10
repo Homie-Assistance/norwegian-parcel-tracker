@@ -109,11 +109,11 @@ class DeliveryStatsStore:
         carrier: str,
         first_event_time: str | None,
         delivered_time: str,
-    ) -> None:
+    ) -> bool:
         if not self._loaded:
             await self.async_load()
         if any(r["tracking_number"] == tracking_number for r in self._records):
-            return
+            return False
         self._records.append(
             {
                 "tracking_number": tracking_number,
@@ -125,6 +125,7 @@ class DeliveryStatsStore:
         await self._store.async_delay_save(
             lambda: {"version": _STORE_VERSION, "records": list(self._records)}, _SAVE_DELAY
         )
+        return True
 
     def get_records(self) -> list[dict[str, Any]]:
         return list(self._records)

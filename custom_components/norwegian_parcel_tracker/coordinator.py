@@ -8,6 +8,7 @@ from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -67,7 +68,9 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._calendar_created_for: str | None = None
         self._refreshing: bool = False
         self._history = ParcelEventHistory(hass, entry.entry_id)
-        self._stats = DeliveryStatsStore(hass)
+        self._stats: DeliveryStatsStore = (
+            hass.data.get(DOMAIN, {}).get("_stats") or DeliveryStatsStore(hass)
+        )
         self._location_coords: tuple[float, float] | None = None
         self._last_geocoded_key: str | None = None
         super().__init__(
@@ -171,14 +174,17 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             await self._async_record_delivery(parcel)
 
     async def _async_record_delivery(self, parcel: ParcelData) -> None:
+        from .sensor import STATS_UPDATED_SIGNAL
         latest = parcel.latest_event
         delivered_time = (latest.date_iso if latest else None) or dt_util.utcnow().isoformat()
-        await self._stats.record_delivery(
+        recorded = await self._stats.record_delivery(
             tracking_number=self.tracking_number,
             carrier=self._carrier,
             first_event_time=self._history.first_event_time(),
             delivered_time=delivered_time,
         )
+        if recorded:
+            async_dispatcher_send(self.hass, STATS_UPDATED_SIGNAL)
 
     async def _async_update_geocode(self, parcel: ParcelData) -> None:
         latest = parcel.latest_event

@@ -53,6 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry_type = entry.data.get(CONF_ENTRY_TYPE)
 
     if entry_type == ENTRY_TYPE_GLOBAL:
+        await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
         return True
 
     if entry_type == ENTRY_TYPE_EMAIL_WATCHER:
@@ -78,7 +79,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry_type = entry.data.get(CONF_ENTRY_TYPE)
 
-    if entry_type in (ENTRY_TYPE_GLOBAL, ENTRY_TYPE_EMAIL_WATCHER):
+    if entry_type == ENTRY_TYPE_GLOBAL:
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        return await hass.config_entries.async_unload_platforms(entry, ["sensor"])
+    if entry_type == ENTRY_TYPE_EMAIL_WATCHER:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         return True
 

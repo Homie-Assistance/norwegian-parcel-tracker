@@ -15,6 +15,7 @@ for mod in [
     "homeassistant.helpers.config_validation",
     "homeassistant.helpers.aiohttp_client",
     "homeassistant.helpers.device_registry",
+    "homeassistant.helpers.dispatcher",
     "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.selector",
     "homeassistant.helpers.storage",

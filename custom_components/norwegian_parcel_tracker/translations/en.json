@@ -182,7 +182,11 @@
       "weight": { "name": "Weight" },
       "length": { "name": "Length" },
       "width": { "name": "Width" },
-      "height": { "name": "Height" }
+      "height": { "name": "Height" },
+      "stats_avg": { "name": "Average delivery time" },
+      "stats_min": { "name": "Shortest delivery" },
+      "stats_max": { "name": "Longest delivery" },
+      "stats_count": { "name": "Deliveries" }
     },
     "button": {
       "order_home_delivery": { "name": "Order home delivery" }

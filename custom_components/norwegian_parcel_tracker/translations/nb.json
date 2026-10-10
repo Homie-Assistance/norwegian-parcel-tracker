@@ -182,7 +182,11 @@
       "weight": { "name": "Vekt" },
       "length": { "name": "Lengde" },
       "width": { "name": "Bredde" },
-      "height": { "name": "Høyde" }
+      "height": { "name": "Høyde" },
+      "stats_avg": { "name": "Gjennomsnittlig leveringstid" },
+      "stats_min": { "name": "Korteste levering" },
+      "stats_max": { "name": "Lengste levering" },
+      "stats_count": { "name": "Leveranser" }
     },
     "button": {
       "order_home_delivery": { "name": "Bestill hjemlevering" }
