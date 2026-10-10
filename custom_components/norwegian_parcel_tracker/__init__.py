@@ -6,9 +6,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 
+from homeassistant.helpers.service import SupportsResponse
+
 from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_EMAIL_WATCHER, ENTRY_TYPE_GLOBAL, GLOBAL_ENTRY_UNIQUE_ID
 from .coordinator import PostenTrackingCoordinator
 from .email_watcher import EmailWatcherCoordinator
+from .event_history import ParcelEventHistory
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +63,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await _async_register_services(hass)
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    history = ParcelEventHistory(hass, entry.entry_id)
+    await history.async_remove()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -115,6 +123,22 @@ async def _async_register_services(hass: HomeAssistant) -> None:
                 return
         _LOGGER.warning("remove_parcel: no entry found for tracking number %s", tracking_number)
 
+    async def get_parcel_history(call):
+        tracking_number = str(call.data.get("tracking_number") or "").strip().upper()
+        for coordinator in hass.data.get(DOMAIN, {}).values():
+            if (
+                hasattr(coordinator, "_history")
+                and getattr(coordinator, "tracking_number", "").upper() == tracking_number
+            ):
+                return {"events": coordinator._history.all_events()}
+        return {"events": []}
+
     hass.services.async_register(DOMAIN, "add_parcel", add_parcel)
     hass.services.async_register(DOMAIN, "refresh", refresh)
     hass.services.async_register(DOMAIN, "remove_parcel", remove_parcel)
+    hass.services.async_register(
+        DOMAIN,
+        "get_parcel_history",
+        get_parcel_history,
+        supports_response=SupportsResponse.OPTIONAL,
+    )

@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError, ParcelData
+from .event_history import DeliveryStatsStore, ParcelEventHistory
 from .const import (
     CARRIER_HELTHJEM,
     CARRIER_POSTEN,
@@ -64,6 +65,8 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._delivered_notified = False
         self._calendar_created_for: str | None = None
         self._refreshing: bool = False
+        self._history = ParcelEventHistory(hass, entry.entry_id)
+        self._stats = DeliveryStatsStore(hass)
         super().__init__(
             hass,
             _LOGGER,
@@ -71,6 +74,10 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL_MINUTES),
             config_entry=entry,
         )
+
+    async def async_config_entry_first_refresh(self) -> None:
+        await self._history.async_load()
+        await super().async_config_entry_first_refresh()
 
     def _get_global_options(self) -> dict[str, Any]:
         for entry in self.hass.config_entries.async_entries(DOMAIN):
@@ -146,6 +153,8 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         if display_name and not parcel.sender_name:
             parcel.sender_name = display_name
 
+        self._history.merge(parcel.events)
+        await self._history.async_save()
         await self._async_handle_side_effects(parcel)
         return parcel
 
@@ -154,6 +163,18 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         await self._async_create_calendar_event(parcel, options)
         await self._async_send_notifications(parcel, options)
         await self._async_handle_auto_delete(parcel)
+        if parcel.is_delivered:
+            await self._async_record_delivery(parcel)
+
+    async def _async_record_delivery(self, parcel: ParcelData) -> None:
+        latest = parcel.latest_event
+        delivered_time = (latest.date_iso if latest else None) or dt_util.utcnow().isoformat()
+        await self._stats.record_delivery(
+            tracking_number=self.tracking_number,
+            carrier=self._carrier,
+            first_event_time=self._history.first_event_time(),
+            delivered_time=delivered_time,
+        )
 
     async def _async_handle_auto_delete(self, parcel: ParcelData) -> None:
         global_opts = self._get_global_options()

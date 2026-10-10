@@ -60,6 +60,8 @@ class BaseParcelSensor(CoordinatorEntity[PostenTrackingCoordinator], SensorEntit
 
 
 class ParcelStatusSensor(BaseParcelSensor):
+    _unrecorded_attributes = frozenset({"recent_events"})
+
     def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "status")
 
     @property
@@ -76,6 +78,7 @@ class ParcelStatusSensor(BaseParcelSensor):
         attrs["npt_master_entity"] = True
         attrs["refreshing"] = self.coordinator._refreshing
         attrs.update(self.coordinator.fits_attributes)
+        attrs["recent_events"] = self.coordinator._history.recent(10)
         return attrs
 
 

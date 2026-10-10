@@ -22,3 +22,10 @@ remove_parcel:
       required: true
       selector:
         text:
+
+get_parcel_history:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:

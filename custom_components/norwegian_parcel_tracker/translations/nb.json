@@ -222,6 +222,16 @@
           "description": "Sporingsnummeret til pakken som skal fjernes."
         }
       }
+    },
+    "get_parcel_history": {
+      "name": "Hent pakkehistorikk",
+      "description": "Returnerer full lagret sporingshendelseshistorikk for en pakke.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken du vil hente historikk for."
+        }
+      }
     }
   }
 }

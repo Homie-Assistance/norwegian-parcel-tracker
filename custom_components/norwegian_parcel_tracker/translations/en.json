@@ -222,6 +222,16 @@
           "description": "Tracking number of the parcel to remove."
         }
       }
+    },
+    "get_parcel_history": {
+      "name": "Get parcel history",
+      "description": "Returns the full stored tracking event history for a parcel.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel to retrieve history for."
+        }
+      }
     }
   }
 }
