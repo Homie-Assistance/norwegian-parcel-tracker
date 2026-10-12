@@ -2,8 +2,14 @@
   "config": {
     "step": {
       "user": {
+        "menu_options": {
+          "add_parcel": "Add parcel",
+          "email_watcher": "Set up email watcher"
+        }
+      },
+      "add_parcel": {
         "title": "Add parcel",
-        "description": "Enter a Posten/Bring tracking number. Global settings (language, delivery contexts) are configured via the Settings entry that was created when you first added this integration.",
+        "description": "Enter a tracking number from Posten/Bring or Helthjem. Global settings (language, delivery contexts) are configured via the Settings entry.",
         "data": {
           "tracking_number": "Tracking number",
           "name": "Display name"
@@ -32,21 +38,56 @@
           "default_notify_delivered": "Default: notify when parcel is delivered",
           "default_create_calendar_event": "Default: create calendar event for estimated delivery",
           "default_stale_warning_hours": "Default warning threshold — hours without movement",
-          "default_stale_critical_hours": "Default critical threshold — hours without movement"
+          "default_stale_critical_hours": "Default critical threshold — hours without movement",
+          "auto_delete_delivered_hours": "Auto-remove delivered parcels after (hours, 0 = never)"
         },
         "data_description": {
           "language": "Norwegian shows Posten's original text. English translates statuses and events to English.",
           "mailbox_enabled": "When enabled, the status sensor reports whether the parcel fits through your mailbox slot.",
           "car_enabled": "When enabled, the status sensor reports whether the parcel fits in your car boot.",
-          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand."
+          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand.",
+          "auto_delete_delivered_hours": "When set to a non-zero value, the integration will automatically remove a parcel entry this many hours after it is first detected as delivered. Set to 0 to keep delivered parcels forever."
         }
+      },
+      "email_watcher": {
+        "title": "Set up email watcher",
+        "description": "Connect an IMAP mailbox. The integration will scan for order confirmation emails and add recognised tracking numbers. Use an app password (not your regular account password) for Gmail and Microsoft accounts.",
+        "data": {
+          "email_server": "IMAP server",
+          "email_port": "Port",
+          "email_username": "Username / email address",
+          "email_password": "Password / app password",
+          "email_folder": "Mailbox folder",
+          "email_poll_interval_minutes": "Poll interval (minutes)",
+          "email_days_back": "Scan emails from the last N days",
+          "email_auto_add": "Automatically add found tracking numbers"
+        },
+        "data_description": {
+          "email_server": "Your mail provider's IMAP server. Examples: imap.gmail.com, outlook.office365.com.",
+          "email_port": "SSL/TLS IMAP port. Almost always 993.",
+          "email_password": "For Gmail and Microsoft accounts, create an app password — your normal account password will not work with IMAP.",
+          "email_folder": "The mailbox folder to scan. Leave as INBOX to scan your inbox.",
+          "email_poll_interval_minutes": "How often to check for new emails. 15 minutes is a good default.",
+          "email_days_back": "On first start, emails this many days back are scanned. Subsequent polls only look at new emails.",
+          "email_auto_add": "When off (default), found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting."
+        }
+      },
+      "confirm_discovery": {
+        "title": "Add parcel found in email?",
+        "description": "The email watcher found tracking number **{tracking_number}**. Add it as a tracked parcel?",
+        "data": {}
       }
     },
     "error": {
       "cannot_connect": "Could not fetch tracking data from Posten/Bring",
       "helthjem_cannot_connect": "Could not fetch tracking data from Helthjem",
       "unsupported_tracking_number": "Invalid or unsupported tracking number. This integration only supports Bring, Helthjem, and Posten. Support for more delivery companies is planned and coming in the near future.",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "cannot_connect_imap": "Could not connect to the IMAP server. Check the server address and port.",
+      "invalid_auth": "Login failed. Check your username and password (use an app password for Gmail/Microsoft).",
+      "email_folder_not_found": "Could not open the mailbox folder. Check the folder name (usually INBOX).",
+      "email_server_required": "IMAP server address is required.",
+      "email_username_required": "Username / email address is required."
     }
   },
   "options": {
@@ -87,15 +128,47 @@
           "default_notify_delivered": "Default: notify when parcel is delivered",
           "default_create_calendar_event": "Default: create calendar event for estimated delivery",
           "default_stale_warning_hours": "Default warning threshold — hours without movement",
-          "default_stale_critical_hours": "Default critical threshold — hours without movement"
+          "default_stale_critical_hours": "Default critical threshold — hours without movement",
+          "auto_delete_delivered_hours": "Auto-remove delivered parcels after (hours, 0 = never)"
         },
         "data_description": {
           "language": "Norwegian shows Posten's original text. English translates statuses and events to English.",
           "mailbox_enabled": "When enabled, the status sensor reports whether the parcel fits through your mailbox slot.",
           "car_enabled": "When enabled, the status sensor reports whether the parcel fits in your car boot.",
-          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand."
+          "carry_enabled": "When enabled, the status sensor reports whether the parcel is small enough to carry by hand.",
+          "auto_delete_delivered_hours": "When set to a non-zero value, the integration will automatically remove a parcel entry this many hours after it is first detected as delivered. Set to 0 to keep delivered parcels forever."
+        }
+      },
+      "email_settings": {
+        "title": "Email watcher settings",
+        "description": "Update your IMAP connection settings. Changes take effect after saving.",
+        "data": {
+          "email_server": "IMAP server",
+          "email_port": "Port",
+          "email_username": "Username / email address",
+          "email_password": "Password / app password",
+          "email_folder": "Mailbox folder",
+          "email_poll_interval_minutes": "Poll interval (minutes)",
+          "email_days_back": "Scan emails from the last N days",
+          "email_auto_add": "Automatically add found tracking numbers"
+        },
+        "data_description": {
+          "email_server": "Your mail provider's IMAP server. Examples: imap.gmail.com, outlook.office365.com.",
+          "email_port": "SSL/TLS IMAP port. Almost always 993.",
+          "email_password": "For Gmail and Microsoft accounts, use an app password — your normal account password will not work with IMAP.",
+          "email_folder": "The mailbox folder to scan. Leave as INBOX to scan your inbox.",
+          "email_poll_interval_minutes": "How often to check for new emails.",
+          "email_days_back": "Emails this many days back are included. Only new (unseen) emails are processed.",
+          "email_auto_add": "When off, found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting."
         }
       }
+    },
+    "error": {
+      "cannot_connect_imap": "Could not connect to the IMAP server. Check the server address and port.",
+      "invalid_auth": "Login failed. Check your username and password (use an app password for Gmail/Microsoft).",
+      "email_folder_not_found": "Could not open the mailbox folder. Check the folder name (usually INBOX).",
+      "email_server_required": "IMAP server address is required.",
+      "email_username_required": "Username / email address is required."
     }
   },
   "entity": {
@@ -109,10 +182,17 @@
       "weight": { "name": "Weight" },
       "length": { "name": "Length" },
       "width": { "name": "Width" },
-      "height": { "name": "Height" }
+      "height": { "name": "Height" },
+      "stats_avg": { "name": "Average delivery time" },
+      "stats_min": { "name": "Shortest delivery" },
+      "stats_max": { "name": "Longest delivery" },
+      "stats_count": { "name": "Deliveries" }
     },
     "button": {
       "order_home_delivery": { "name": "Order home delivery" }
+    },
+    "device_tracker": {
+      "location": { "name": "Location" }
     }
   },
   "services": {
@@ -127,6 +207,36 @@
         "name": {
           "name": "Display name",
           "description": "Optional friendly name shown in the integration list."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Refresh",
+      "description": "Immediately polls for updated tracking data. If tracking_number is omitted, refreshes all parcels.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Optional — refresh only this parcel. Leave blank to refresh all."
+        }
+      }
+    },
+    "remove_parcel": {
+      "name": "Remove parcel",
+      "description": "Removes a parcel entry from the integration.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel to remove."
+        }
+      }
+    },
+    "get_parcel_history": {
+      "name": "Get parcel history",
+      "description": "Returns the full stored tracking event history for a parcel.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel to retrieve history for."
         }
       }
     }

@@ -6,18 +6,27 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 
-from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_GLOBAL, GLOBAL_ENTRY_UNIQUE_ID
+from homeassistant.core import SupportsResponse
+
+from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_EMAIL_WATCHER, ENTRY_TYPE_GLOBAL, GLOBAL_ENTRY_UNIQUE_ID
 from .coordinator import PostenTrackingCoordinator
+from .email_watcher import EmailWatcherCoordinator
+from .event_history import ParcelEventHistory
+from .geocoder import NominatimGeocoder
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "button"]
+PLATFORMS = ["sensor", "button", "device_tracker"]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    if "_geocoder" not in hass.data[DOMAIN]:
+        geocoder = NominatimGeocoder(hass)
+        await geocoder.async_load()
+        hass.data[DOMAIN]["_geocoder"] = geocoder
     await _async_register_services(hass)
     _async_maybe_create_global_entry(hass)
     return True
@@ -41,7 +50,16 @@ def _async_maybe_create_global_entry(hass: HomeAssistant) -> None:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
-    if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
+    entry_type = entry.data.get(CONF_ENTRY_TYPE)
+
+    if entry_type == ENTRY_TYPE_GLOBAL:
+        await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+        return True
+
+    if entry_type == ENTRY_TYPE_EMAIL_WATCHER:
+        coordinator = EmailWatcherCoordinator(hass, entry)
+        await coordinator.async_config_entry_first_refresh()
+        hass.data[DOMAIN][entry.entry_id] = coordinator
         return True
 
     coordinator = PostenTrackingCoordinator(hass, entry)
@@ -53,9 +71,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    history = ParcelEventHistory(hass, entry.entry_id)
+    await history.async_remove()
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
+    entry_type = entry.data.get(CONF_ENTRY_TYPE)
+
+    if entry_type == ENTRY_TYPE_GLOBAL:
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        return await hass.config_entries.async_unload_platforms(entry, ["sensor"])
+    if entry_type == ENTRY_TYPE_EMAIL_WATCHER:
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         return True
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
@@ -76,15 +106,48 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         )
 
     async def refresh(call):
+        tracking_filter = str(call.data.get("tracking_number") or "").strip().upper()
         coordinators = [
             v for v in hass.data.get(DOMAIN, {}).values()
             if hasattr(v, "_refreshing")
         ]
+        if tracking_filter:
+            coordinators = [
+                c for c in coordinators
+                if getattr(c, "tracking_number", "").upper() == tracking_filter
+            ]
         for coordinator in coordinators:
             coordinator._refreshing = True
             coordinator.async_update_listeners()
         for coordinator in coordinators:
             await coordinator.async_request_refresh()
 
+    async def remove_parcel(call):
+        tracking_number = str(call.data.get("tracking_number") or "").strip().upper()
+        if not tracking_number:
+            return
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if (entry.unique_id or "").upper() == tracking_number:
+                await hass.config_entries.async_remove(entry.entry_id)
+                return
+        _LOGGER.warning("remove_parcel: no entry found for tracking number %s", tracking_number)
+
+    async def get_parcel_history(call):
+        tracking_number = str(call.data.get("tracking_number") or "").strip().upper()
+        for coordinator in hass.data.get(DOMAIN, {}).values():
+            if (
+                hasattr(coordinator, "_history")
+                and getattr(coordinator, "tracking_number", "").upper() == tracking_number
+            ):
+                return {"events": coordinator._history.all_events()}
+        return {"events": []}
+
     hass.services.async_register(DOMAIN, "add_parcel", add_parcel)
     hass.services.async_register(DOMAIN, "refresh", refresh)
+    hass.services.async_register(DOMAIN, "remove_parcel", remove_parcel)
+    hass.services.async_register(
+        DOMAIN,
+        "get_parcel_history",
+        get_parcel_history,
+        supports_response=SupportsResponse.OPTIONAL,
+    )

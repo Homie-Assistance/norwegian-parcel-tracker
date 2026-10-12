@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import logging
 from typing import Any
 
@@ -8,11 +8,19 @@ from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError, ParcelData
+from .event_history import DeliveryStatsStore, ParcelEventHistory
+from .geocoder import NominatimGeocoder
 from .const import (
+    CARRIER_HELTHJEM,
+    CARRIER_POSTEN,
+    CONF_AUTO_DELETE_DELIVERED_HOURS,
     CONF_CALENDAR_ENTITY,
+    CONF_CARRIER,
     CONF_CAR_ENABLED, CONF_CAR_H, CONF_CAR_L, CONF_CAR_W,
     CONF_CARRY_ENABLED, CONF_CARRY_H, CONF_CARRY_L, CONF_CARRY_W,
     CONF_CREATE_CALENDAR_EVENT,
@@ -31,9 +39,6 @@ from .const import (
     CONF_NOTIFY_TARGET,
     CONF_STALE_CRITICAL_HOURS,
     CONF_STALE_WARNING_HOURS,
-    CARRIER_HELTHJEM,
-    CARRIER_POSTEN,
-    CONF_CARRIER,
     CONF_TRACKING_NUMBER,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
@@ -62,6 +67,13 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._delivered_notified = False
         self._calendar_created_for: str | None = None
         self._refreshing: bool = False
+        self._history = ParcelEventHistory(hass, entry.entry_id)
+        hass.data.setdefault(DOMAIN, {})
+        if "_stats" not in hass.data[DOMAIN]:
+            hass.data[DOMAIN]["_stats"] = DeliveryStatsStore(hass)
+        self._stats: DeliveryStatsStore = hass.data[DOMAIN]["_stats"]
+        self._location_coords: tuple[float, float] | None = None
+        self._last_geocoded_key: str | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -69,6 +81,10 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL_MINUTES),
             config_entry=entry,
         )
+
+    async def async_config_entry_first_refresh(self) -> None:
+        await self._history.async_load()
+        await super().async_config_entry_first_refresh()
 
     def _get_global_options(self) -> dict[str, Any]:
         for entry in self.hass.config_entries.async_entries(DOMAIN):
@@ -144,16 +160,85 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         if display_name and not parcel.sender_name:
             parcel.sender_name = display_name
 
+        self._history.merge(parcel.events)
+        await self._history.async_save()
         await self._async_handle_side_effects(parcel)
+        await self._async_update_geocode(parcel)
         return parcel
 
     async def _async_handle_side_effects(self, parcel: ParcelData) -> None:
         options = self._get_effective_options()
         await self._async_create_calendar_event(parcel, options)
         await self._async_send_notifications(parcel, options)
+        await self._async_handle_auto_delete(parcel)
+        if parcel.is_delivered:
+            await self._async_record_delivery(parcel)
+
+    async def _async_record_delivery(self, parcel: ParcelData) -> None:
+        from .sensor import STATS_UPDATED_SIGNAL
+        latest = parcel.latest_event
+        delivered_time = (latest.date_iso if latest else None) or dt_util.utcnow().isoformat()
+        recorded = await self._stats.record_delivery(
+            tracking_number=self.tracking_number,
+            carrier=self._carrier,
+            first_event_time=self._history.first_event_time(),
+            delivered_time=delivered_time,
+        )
+        if recorded:
+            async_dispatcher_send(self.hass, STATS_UPDATED_SIGNAL)
+
+    async def _async_update_geocode(self, parcel: ParcelData) -> None:
+        latest = parcel.latest_event
+        if not latest:
+            return
+        raw = latest.raw or {}
+        postal = raw.get("postalCode") or ""
+        city = raw.get("city") or (latest.location or "").split()[-1] if latest.location else ""
+        country = raw.get("countryCode") or "NO"
+        key = f"{country}|{postal}|{city}".lower()
+        if key == self._last_geocoded_key or not (postal or city):
+            return
+        geocoder: NominatimGeocoder | None = self.hass.data.get(DOMAIN, {}).get("_geocoder")
+        if geocoder is None:
+            return
+        coords = await geocoder.geocode(postal or None, city or None, country)
+        self._last_geocoded_key = key
+        self._location_coords = coords
+
+    async def _async_handle_auto_delete(self, parcel: ParcelData) -> None:
+        global_opts = self._get_global_options()
+        auto_delete_hours = int(global_opts.get(CONF_AUTO_DELETE_DELIVERED_HOURS, 0) or 0)
+        if not auto_delete_hours or not parcel.is_delivered:
+            return
+
+        delivered_at_str = self.entry.data.get("delivered_at")
+        if not delivered_at_str:
+            new_data = {**self.entry.data, "delivered_at": dt_util.utcnow().isoformat()}
+            self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+            return
+
+        try:
+            delivered_at = datetime.fromisoformat(delivered_at_str)
+            if delivered_at.tzinfo is None:
+                delivered_at = delivered_at.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return
+
+        elapsed = dt_util.utcnow() - delivered_at
+        if elapsed >= timedelta(hours=auto_delete_hours):
+            _LOGGER.info(
+                "Auto-removing delivered parcel %s after %.0f hours",
+                self.tracking_number,
+                elapsed.total_seconds() / 3600,
+            )
+            self.hass.async_create_task(
+                self.hass.config_entries.async_remove(self.entry.entry_id)
+            )
 
     async def _async_create_calendar_event(self, parcel: ParcelData, options: dict) -> None:
         if not options.get(CONF_CREATE_CALENDAR_EVENT):
+            return
+        if parcel.is_delivered:
             return
 
         calendar_entity = options.get(CONF_CALENDAR_ENTITY)

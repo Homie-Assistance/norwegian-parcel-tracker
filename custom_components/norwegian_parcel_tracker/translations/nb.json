@@ -2,8 +2,14 @@
   "config": {
     "step": {
       "user": {
+        "menu_options": {
+          "add_parcel": "Legg til pakke",
+          "email_watcher": "Sett opp e-postvokter"
+        }
+      },
+      "add_parcel": {
         "title": "Legg til pakke",
-        "description": "Skriv inn et sporingsnummer fra Posten/Bring. Globale innstillinger (språk, leveringskontekster) konfigureres via Innstillinger-oppføringen som ble opprettet første gang du la til denne integrasjonen.",
+        "description": "Skriv inn et sporingsnummer fra Posten/Bring eller Helthjem. Globale innstillinger (språk, leveringskontekster) konfigureres via Innstillinger-oppføringen.",
         "data": {
           "tracking_number": "Sporingsnummer",
           "name": "Visningsnavn"
@@ -32,21 +38,56 @@
           "default_notify_delivered": "Standard: varsle når pakken er levert",
           "default_create_calendar_event": "Standard: opprett kalenderoppføring for estimert levering",
           "default_stale_warning_hours": "Standard advarselsgrense — timer uten bevegelse",
-          "default_stale_critical_hours": "Standard kritisk grense — timer uten bevegelse"
+          "default_stale_critical_hours": "Standard kritisk grense — timer uten bevegelse",
+          "auto_delete_delivered_hours": "Slett leverte pakker automatisk etter (timer, 0 = aldri)"
         },
         "data_description": {
           "language": "Norsk viser Postens opprinnelige tekst. Engelsk oversetter statuser og hendelser til engelsk.",
           "mailbox_enabled": "Når aktivert rapporterer statussensoren om pakken passer gjennom postkassespalten din.",
           "car_enabled": "Når aktivert rapporterer statussensoren om pakken passer i bagasjerommet ditt.",
-          "carry_enabled": "Når aktivert rapporterer statussensoren om pakken er liten nok til å bæres for hånd."
+          "carry_enabled": "Når aktivert rapporterer statussensoren om pakken er liten nok til å bæres for hånd.",
+          "auto_delete_delivered_hours": "Når satt til en verdi større enn 0, fjerner integrasjonen automatisk pakkeoppføringen dette antallet timer etter at pakken første gang ble registrert som levert. Sett til 0 for å beholde leverte pakker for alltid."
         }
+      },
+      "email_watcher": {
+        "title": "Sett opp e-postvokter",
+        "description": "Koble til en IMAP-postkasse. Integrasjonen søker gjennom ordrebekreftelser og legger til gjenkjente sporingsnumre. Bruk et app-passord (ikke ditt vanlige kontopassord) for Gmail og Microsoft-kontoer.",
+        "data": {
+          "email_server": "IMAP-server",
+          "email_port": "Port",
+          "email_username": "Brukernavn / e-postadresse",
+          "email_password": "Passord / app-passord",
+          "email_folder": "Postmappe",
+          "email_poll_interval_minutes": "Søkeintervall (minutter)",
+          "email_days_back": "Søk i e-post fra de siste N dagene",
+          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages"
+        },
+        "data_description": {
+          "email_server": "IMAP-serveren til e-postleverandøren din. Eksempler: imap.gmail.com, outlook.office365.com.",
+          "email_port": "SSL/TLS IMAP-port. Nesten alltid 993.",
+          "email_password": "For Gmail og Microsoft-kontoer må du opprette et app-passord — ditt vanlige kontopassord fungerer ikke med IMAP.",
+          "email_folder": "Postmappen som skal søkes. La stå som INBOX for å søke i innboksen.",
+          "email_poll_interval_minutes": "Hvor ofte nye e-poster sjekkes. 15 minutter er et godt utgangspunkt.",
+          "email_days_back": "Ved første oppstart søkes det gjennom e-post fra de siste N dagene. Etterfølgende søk behandler bare nye e-poster.",
+          "email_auto_add": "Når av (standard) vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse."
+        }
+      },
+      "confirm_discovery": {
+        "title": "Legg til pakke funnet i e-post?",
+        "description": "E-postvokteren fant sporingsnummeret **{tracking_number}**. Legge det til som en sporet pakke?",
+        "data": {}
       }
     },
     "error": {
       "cannot_connect": "Kunne ikke hente sporingsinformasjon fra Posten/Bring",
       "helthjem_cannot_connect": "Kunne ikke hente sporingsinformasjon fra Helthjem",
       "unsupported_tracking_number": "Ugyldig eller ikke-støttet sporingsnummer. Denne integrasjonen støtter kun Bring, Helthjem og Posten. Støtte for flere leverandører er planlagt og kommer i nær fremtid.",
-      "unknown": "Uventet feil"
+      "unknown": "Uventet feil",
+      "cannot_connect_imap": "Kunne ikke koble til IMAP-serveren. Kontroller serveradressen og porten.",
+      "invalid_auth": "Innlogging mislyktes. Kontroller brukernavn og passord (bruk app-passord for Gmail/Microsoft).",
+      "email_folder_not_found": "Kunne ikke åpne postmappen. Kontroller mappenavnet (vanligvis INBOX).",
+      "email_server_required": "IMAP-serveradresse er påkrevd.",
+      "email_username_required": "Brukernavn / e-postadresse er påkrevd."
     }
   },
   "options": {
@@ -87,15 +128,47 @@
           "default_notify_delivered": "Standard: varsle når pakken er levert",
           "default_create_calendar_event": "Standard: opprett kalenderoppføring for estimert levering",
           "default_stale_warning_hours": "Standard advarselsgrense — timer uten bevegelse",
-          "default_stale_critical_hours": "Standard kritisk grense — timer uten bevegelse"
+          "default_stale_critical_hours": "Standard kritisk grense — timer uten bevegelse",
+          "auto_delete_delivered_hours": "Slett leverte pakker automatisk etter (timer, 0 = aldri)"
         },
         "data_description": {
           "language": "Norsk viser Postens opprinnelige tekst. Engelsk oversetter statuser og hendelser til engelsk.",
           "mailbox_enabled": "Når aktivert rapporterer statussensoren om pakken passer gjennom postkassespalten din.",
           "car_enabled": "Når aktivert rapporterer statussensoren om pakken passer i bagasjerommet ditt.",
-          "carry_enabled": "Når aktivert rapporterer statussensoren om pakken er liten nok til å bæres for hånd."
+          "carry_enabled": "Når aktivert rapporterer statussensoren om pakken er liten nok til å bæres for hånd.",
+          "auto_delete_delivered_hours": "Når satt til en verdi større enn 0, fjerner integrasjonen automatisk pakkeoppføringen dette antallet timer etter at pakken første gang ble registrert som levert. Sett til 0 for å beholde leverte pakker for alltid."
+        }
+      },
+      "email_settings": {
+        "title": "Innstillinger for e-postvokter",
+        "description": "Oppdater IMAP-tilkoblingsinnstillingene. Endringene trer i kraft etter lagring.",
+        "data": {
+          "email_server": "IMAP-server",
+          "email_port": "Port",
+          "email_username": "Brukernavn / e-postadresse",
+          "email_password": "Passord / app-passord",
+          "email_folder": "Postmappe",
+          "email_poll_interval_minutes": "Søkeintervall (minutter)",
+          "email_days_back": "Søk i e-post fra de siste N dagene",
+          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages"
+        },
+        "data_description": {
+          "email_server": "IMAP-serveren til e-postleverandøren din. Eksempler: imap.gmail.com, outlook.office365.com.",
+          "email_port": "SSL/TLS IMAP-port. Nesten alltid 993.",
+          "email_password": "For Gmail og Microsoft-kontoer, bruk et app-passord — ditt vanlige kontopassord fungerer ikke med IMAP.",
+          "email_folder": "Postmappen som skal søkes. La stå som INBOX for å søke i innboksen.",
+          "email_poll_interval_minutes": "Hvor ofte nye e-poster sjekkes.",
+          "email_days_back": "E-post fra de siste N dagene inkluderes. Bare nye (ubehandlede) e-poster behandles.",
+          "email_auto_add": "Når av vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse."
         }
       }
+    },
+    "error": {
+      "cannot_connect_imap": "Kunne ikke koble til IMAP-serveren. Kontroller serveradressen og porten.",
+      "invalid_auth": "Innlogging mislyktes. Kontroller brukernavn og passord (bruk app-passord for Gmail/Microsoft).",
+      "email_folder_not_found": "Kunne ikke åpne postmappen. Kontroller mappenavnet (vanligvis INBOX).",
+      "email_server_required": "IMAP-serveradresse er påkrevd.",
+      "email_username_required": "Brukernavn / e-postadresse er påkrevd."
     }
   },
   "entity": {
@@ -109,10 +182,17 @@
       "weight": { "name": "Vekt" },
       "length": { "name": "Lengde" },
       "width": { "name": "Bredde" },
-      "height": { "name": "Høyde" }
+      "height": { "name": "Høyde" },
+      "stats_avg": { "name": "Gjennomsnittlig leveringstid" },
+      "stats_min": { "name": "Korteste levering" },
+      "stats_max": { "name": "Lengste levering" },
+      "stats_count": { "name": "Leveranser" }
     },
     "button": {
       "order_home_delivery": { "name": "Bestill hjemlevering" }
+    },
+    "device_tracker": {
+      "location": { "name": "Posisjon" }
     }
   },
   "services": {
@@ -127,6 +207,36 @@
         "name": {
           "name": "Visningsnavn",
           "description": "Valgfritt navn som vises i integrasjonslisten."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Oppdater",
+      "description": "Henter umiddelbart oppdatert sporingsinformasjon. Hvis sporingsnummer utelates, oppdateres alle pakker.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Valgfritt — oppdater bare denne pakken. La stå tom for å oppdatere alle."
+        }
+      }
+    },
+    "remove_parcel": {
+      "name": "Fjern pakke",
+      "description": "Fjerner en pakkeoppføring fra integrasjonen.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken som skal fjernes."
+        }
+      }
+    },
+    "get_parcel_history": {
+      "name": "Hent pakkehistorikk",
+      "description": "Returnerer full lagret sporingshendelseshistorikk for en pakke.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken du vil hente historikk for."
         }
       }
     }

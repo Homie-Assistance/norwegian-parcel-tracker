@@ -1,20 +1,42 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength, UnitOfMass
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_DISPLAY_NAME, DOMAIN
+from .const import (
+    CARRIER_HELTHJEM,
+    CARRIER_POSTEN,
+    CONF_DISPLAY_NAME,
+    CONF_ENTRY_TYPE,
+    DOMAIN,
+    ENTRY_TYPE_GLOBAL,
+)
 from .coordinator import PostenTrackingCoordinator
+from .event_history import DeliveryStatsStore
 from .runtime_strings import _t
+
+STATS_UPDATED_SIGNAL = f"{DOMAIN}_stats_updated"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+    if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
+        stats: DeliveryStatsStore = hass.data[DOMAIN].get("_stats") or DeliveryStatsStore(hass)
+        hass.data[DOMAIN].setdefault("_stats", stats)
+        entities = []
+        for carrier, carrier_label in ((CARRIER_POSTEN, "Posten"), (CARRIER_HELTHJEM, "Helthjem")):
+            for stat in ("avg", "min", "max", "count"):
+                entities.append(DeliveryStatsSensor(hass, stats, carrier, carrier_label, stat))
+        async_add_entities(entities)
+        return
+
     coordinator: PostenTrackingCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
         [
@@ -60,6 +82,8 @@ class BaseParcelSensor(CoordinatorEntity[PostenTrackingCoordinator], SensorEntit
 
 
 class ParcelStatusSensor(BaseParcelSensor):
+    _unrecorded_attributes = frozenset({"recent_events"})
+
     def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "status")
 
     @property
@@ -76,6 +100,7 @@ class ParcelStatusSensor(BaseParcelSensor):
         attrs["npt_master_entity"] = True
         attrs["refreshing"] = self.coordinator._refreshing
         attrs.update(self.coordinator.fits_attributes)
+        attrs["recent_events"] = self.coordinator._history.recent(10)
         return attrs
 
 
@@ -193,5 +218,76 @@ class ParcelHeightSensor(BaseParcelSensor):
 
     def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "height")
 
+
+def _transit_days(record: dict[str, Any]) -> float | None:
+    try:
+        t0 = datetime.fromisoformat(record["first_event_time"])
+        t1 = datetime.fromisoformat(record["delivered_time"])
+        if t0.tzinfo is None:
+            t0 = t0.replace(tzinfo=timezone.utc)
+        if t1.tzinfo is None:
+            t1 = t1.replace(tzinfo=timezone.utc)
+        delta = (t1 - t0).total_seconds() / 86400
+        return round(delta, 1) if delta >= 0 else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+class DeliveryStatsSensor(SensorEntity):
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "d"
+    _attr_icon = "mdi:chart-bar"
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        store: DeliveryStatsStore,
+        carrier: str,
+        carrier_label: str,
+        stat: str,
+    ) -> None:
+        self._hass = hass
+        self._store = store
+        self._carrier = carrier
+        self._stat = stat
+        self._attr_unique_id = f"npt_stats_{carrier}_{stat}"
+        self._attr_translation_key = f"stats_{stat}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"stats_{carrier}")},
+            "name": f"{carrier_label} delivery statistics",
+            "manufacturer": carrier_label,
+            "model": "Delivery statistics",
+            "entry_type": "service",
+        }
+        if stat == "count":
+            self._attr_native_unit_of_measurement = None
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_icon = "mdi:counter"
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(self._hass, STATS_UPDATED_SIGNAL, self._handle_stats_update)
+        )
+
+    @callback
+    def _handle_stats_update(self) -> None:
+        self.async_write_ha_state()
+
     @property
-    def native_value(self): return self.coordinator.data.height_cm if self.coordinator.data else None
+    def native_value(self) -> float | int | None:
+        records = [r for r in self._store.get_records() if r.get("carrier") == self._carrier]
+        if not records:
+            return None
+        if self._stat == "count":
+            return len(records)
+        days = [d for d in (_transit_days(r) for r in records) if d is not None]
+        if not days:
+            return None
+        if self._stat == "avg":
+            return round(sum(days) / len(days), 1)
+        if self._stat == "min":
+            return min(days)
+        if self._stat == "max":
+            return max(days)
+        return None

@@ -1,6 +1,6 @@
 DOMAIN = "norwegian_parcel_tracker"
 NAME = "Norwegian Parcel Tracker"
-VERSION = "0.1.6"
+VERSION = "1.3.0"
 
 # ── Config entry types ─────────────────────────────────────────────────────────
 CONF_ENTRY_TYPE = "entry_type"
@@ -62,6 +62,26 @@ CONF_MAX_HEIGHT_CM = "max_height_cm"
 CONF_CARRIER = "carrier"
 CARRIER_POSTEN = "posten"
 CARRIER_HELTHJEM = "helthjem"
+
+# ── Auto-delete ────────────────────────────────────────────────────────────────
+CONF_AUTO_DELETE_DELIVERED_HOURS = "auto_delete_delivered_hours"
+DEFAULT_AUTO_DELETE_DELIVERED_HOURS = 0  # 0 = disabled
+
+# ── Email watcher ──────────────────────────────────────────────────────────────
+ENTRY_TYPE_EMAIL_WATCHER = "email_watcher"
+CONF_EMAIL_SERVER = "email_server"
+CONF_EMAIL_PORT = "email_port"
+CONF_EMAIL_USERNAME = "email_username"
+CONF_EMAIL_PASSWORD = "email_password"
+CONF_EMAIL_FOLDER = "email_folder"
+CONF_EMAIL_POLL_INTERVAL_MINUTES = "email_poll_interval_minutes"
+CONF_EMAIL_DAYS_BACK = "email_days_back"
+DEFAULT_EMAIL_PORT = 993
+DEFAULT_EMAIL_FOLDER = "INBOX"
+DEFAULT_EMAIL_POLL_INTERVAL_MINUTES = 15
+DEFAULT_EMAIL_DAYS_BACK = 30
+CONF_EMAIL_AUTO_ADD = "email_auto_add"
+DEFAULT_EMAIL_AUTO_ADD = False  # approval mode by default
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 DEFAULT_SCAN_INTERVAL_MINUTES = 30
