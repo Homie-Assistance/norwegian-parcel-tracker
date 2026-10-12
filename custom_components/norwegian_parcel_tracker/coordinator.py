@@ -68,9 +68,10 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._calendar_created_for: str | None = None
         self._refreshing: bool = False
         self._history = ParcelEventHistory(hass, entry.entry_id)
-        self._stats: DeliveryStatsStore = (
-            hass.data.get(DOMAIN, {}).get("_stats") or DeliveryStatsStore(hass)
-        )
+        hass.data.setdefault(DOMAIN, {})
+        if "_stats" not in hass.data[DOMAIN]:
+            hass.data[DOMAIN]["_stats"] = DeliveryStatsStore(hass)
+        self._stats: DeliveryStatsStore = hass.data[DOMAIN]["_stats"]
         self._location_coords: tuple[float, float] | None = None
         self._last_geocoded_key: str | None = None
         super().__init__(

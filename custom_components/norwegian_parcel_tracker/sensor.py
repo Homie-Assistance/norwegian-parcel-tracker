@@ -290,6 +290,4 @@ class DeliveryStatsSensor(SensorEntity):
             return min(days)
         if self._stat == "max":
             return max(days)
-
-    @property
-    def native_value(self): return self.coordinator.data.height_cm if self.coordinator.data else None
+        return None
