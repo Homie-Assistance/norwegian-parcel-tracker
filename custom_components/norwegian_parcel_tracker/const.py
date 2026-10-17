@@ -1,6 +1,6 @@
 DOMAIN = "norwegian_parcel_tracker"
 NAME = "Norwegian Parcel Tracker"
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 
 # ── Config entry types ─────────────────────────────────────────────────────────
 CONF_ENTRY_TYPE = "entry_type"
