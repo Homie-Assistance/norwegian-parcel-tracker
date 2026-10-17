@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+
+- Re-release of 1.3.0 under a new tag. No code changes.
+
 ## 1.3.0
 
 ### New features
