@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2
+
+- Fixed critical bug: `'NoneType' object can't be awaited` on all parcel entries. `Store.async_delay_save` is a synchronous HA callback, not a coroutine; awaiting it returned `None` which crashed every parcel entry setup.
+
 ## 1.3.1
 
 - Re-release of 1.3.0 under a new tag. No code changes.
