@@ -80,7 +80,7 @@ class ParcelEventHistory:
         return self._events[-1].get("date_iso") if self._events else None
 
     async def async_save(self) -> None:
-        await self._store.async_delay_save(
+        self._store.async_delay_save(
             lambda: {"version": _STORE_VERSION, "events": self._events}, _SAVE_DELAY
         )
 
@@ -122,7 +122,7 @@ class DeliveryStatsStore:
                 "delivered_time": delivered_time,
             }
         )
-        await self._store.async_delay_save(
+        self._store.async_delay_save(
             lambda: {"version": _STORE_VERSION, "records": list(self._records)}, _SAVE_DELAY
         )
         return True
