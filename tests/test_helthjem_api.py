@@ -48,6 +48,28 @@ def test_parcel_from_helthjem_delivered():
     assert parcel.latest_event.description == "Pakken er levert til hentested."
 
 
+def test_parcel_from_helthjem_picked_up_phrase():
+    # "Du har hentet pakken din!" is the pickup-point collection message — must count as delivered
+    raw = {
+        "parcelReference": TRACKING_NUMBER,
+        "status": "PICKED_UP",
+        "estimatedDelivery": {"date": "2026-06-07"},
+        "deliveryPoint": {"postalCode": "7160"},
+        "sender": {"postalCode": "0001"},
+        "events": [
+            {
+                "id": "x1",
+                "createdAt": "2026-06-07T14:00:00+02:00",
+                "status": "PICKED_UP",
+                "location": "Trondheim",
+                "message": {"content": "Du har hentet pakken din!"},
+            }
+        ],
+    }
+    parcel = _parcel_from_helthjem(raw, TRACKING_NUMBER)
+    assert parcel.is_delivered
+
+
 def test_parcel_from_helthjem_no_events():
     raw = {
         "parcelReference": TRACKING_NUMBER,
