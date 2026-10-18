@@ -25,6 +25,9 @@ PLATFORMS = ["sensor", "button", "device_tracker"]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _PANEL_URL = "/norwegian_parcel_tracker_panel"
+_CARD_URL = "/norwegian_parcel_tracker/card.js"
+_COMPACT_CARD_URL = "/norwegian_parcel_tracker/compact_card.js"
+_MAP_CARD_URL = "/norwegian_parcel_tracker/map_card.js"
 _PANEL_FRONTEND_DIR = ospath.join(ospath.dirname(__file__), "frontend")
 _NOTE_MAX_LEN = 2000
 
@@ -135,9 +138,18 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
     panel_js = ospath.join(_PANEL_FRONTEND_DIR, "panel.js")
     if not ospath.isfile(panel_js):
         return
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(_PANEL_URL, panel_js, cache_headers=False)]
-    )
+
+    static_paths = [StaticPathConfig(_PANEL_URL, panel_js, cache_headers=False)]
+    for url, filename in (
+        (_CARD_URL, "card.js"),
+        (_COMPACT_CARD_URL, "compact_card.js"),
+        (_MAP_CARD_URL, "map_card.js"),
+    ):
+        fpath = ospath.join(_PANEL_FRONTEND_DIR, filename)
+        if ospath.isfile(fpath):
+            static_paths.append(StaticPathConfig(url, fpath, cache_headers=False))
+
+    await hass.http.async_register_static_paths(static_paths)
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path="norwegian-parcel-tracker",

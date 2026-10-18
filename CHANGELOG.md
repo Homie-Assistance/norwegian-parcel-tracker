@@ -20,10 +20,21 @@
 | `clear_icon` | `tracking_number` | Remove the custom icon |
 | `rename_parcel` | `tracking_number`, `name` | Set a display name (1–100 chars) |
 
+### Card files now bundled
+
+The Lovelace cards are now shipped inside the integration — no separate HACS frontend repo needed. After installing the integration, add three Lovelace resources in Settings → Dashboards → Resources:
+
+| Resource URL | Card type |
+|---|---|
+| `/norwegian_parcel_tracker/card.js` | `custom:norwegian-parcel-tracker-card` |
+| `/norwegian_parcel_tracker/compact_card.js` | `custom:norwegian-parcel-tracker-compact` |
+| `/norwegian_parcel_tracker/map_card.js` | `custom:norwegian-parcel-tracker-map-card` |
+
 ### Other changes
 
 - `manifest.json` version bumped to `2.0.0`; added `after_dependencies: ["frontend", "http", "panel_custom"]`.
-- Panel and services are guard-registered (safe to reload without duplicate registration).
+- Panel and card JS served as static paths — all registered together on first HA start.
+- Services and panel are guard-registered (safe to reload without duplicate registration).
 - Meta store entries are cleaned up when a parcel entry is removed.
 - `async_update_listeners()` (not `async_request_refresh()`) is used after meta changes — propagates to the UI immediately without triggering a carrier API call.
 
