@@ -385,6 +385,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const trackingNum = a.tracking_number || state.entity_id;
     const carrierLinks = this._carrierLinks(a.carrier, trackingNum);
     const disruptionUrl = this._disruptionSearchUrl(a.route_coords);
+    const homeDeliveryUrl = a.home_delivery_url || null;
+    const pickupUrl = a.pickup_url || null;
+    const pickupName = a.pickup_name || null;
 
     const eventsHtml = events
       .slice(0, 20)
@@ -418,6 +421,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
         <div class="carrier-links">
           ${carrierLinks.tracking ? `<a href="${this._escHtml(carrierLinks.tracking)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🔗 ${this._escHtml(carrierLinks.trackingLabel)}</a>` : (carrierLinks.trackingLabel ? `<span class="carrier-link-text">📦 ${this._escHtml(carrierLinks.trackingLabel)}</span>` : "")}
+          ${homeDeliveryUrl ? `<a href="${this._escHtml(homeDeliveryUrl)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🏠 ${this._isNo ? "Bestill hjemlevering" : "Order home delivery"}</a>` : ""}
+          ${pickupUrl ? `<a href="${this._escHtml(pickupUrl)}" target="_blank" rel="noopener noreferrer" class="carrier-link">📍 ${this._escHtml(pickupName || (this._isNo ? "Hentested" : "Pickup point"))}</a>` : ""}
           <a href="${this._escHtml(disruptionUrl)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🌐 Søk etter forstyrrelser</a>
           ${phone ? `<a href="tel:${this._escHtml(phone.num)}" class="carrier-link">📞 ${this._escHtml(phone.label)}</a>` : ""}
         </div>
@@ -712,6 +717,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false });
     L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
     map.fitBounds(L.latLngBounds(allLatLngs), { padding: [24, 24] });
+    this._leafletMap = map;
 
     parcelRoutes.forEach((p) => {
       const ordered = [...p.coords].reverse();
