@@ -46,7 +46,7 @@ const CARD_CSS = `
     height: 260px;
     position: relative;
   }
-  .map-wrapper ha-map {
+  .ha-map-container > div {
     width: 100%;
     height: 100%;
   }
@@ -150,6 +150,11 @@ function _formatDate(iso) {
 
 // ── Card element ──────────────────────────────────────────────────────────────
 
+const _MC_CARTO_TILES = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+const _MC_CARTO_ATTR = "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>";
+const _MC_LEAFLET_CSS = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+const _MC_LEAFLET_JS  = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+
 class NorwegianParcelTrackerMapCard extends HTMLElement {
   constructor() {
     super();
@@ -157,6 +162,7 @@ class NorwegianParcelTrackerMapCard extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._rendered = false;
+    this._leafletMap = null;
   }
 
   setConfig(config) {
@@ -244,7 +250,12 @@ class NorwegianParcelTrackerMapCard extends HTMLElement {
 
   _buildShadow() {
     const root = this.shadowRoot;
+    if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
     root.innerHTML = "";
+
+    const leafletLink = document.createElement("link");
+    leafletLink.rel = "stylesheet";
+    leafletLink.href = _MC_LEAFLET_CSS;
 
     const style = document.createElement("style");
     style.textContent = CARD_CSS;
@@ -263,6 +274,7 @@ class NorwegianParcelTrackerMapCard extends HTMLElement {
       <div class="route-section" style="display:none"></div>
     `;
 
+    root.appendChild(leafletLink);
     root.appendChild(style);
     root.appendChild(card);
   }
@@ -351,38 +363,55 @@ class NorwegianParcelTrackerMapCard extends HTMLElement {
   }
 
   _updateMap(container, lat, lon, locationName, latestLoc) {
-    // Use ha-map if not already created, or update entities list
-    let haMap = container.querySelector("ha-map");
-    if (!haMap) {
-      container.innerHTML = "";
-      haMap = document.createElement("ha-map");
-      haMap.style.width = "100%";
-      haMap.style.height = "100%";
-      container.appendChild(haMap);
+    this._initLeafletMap(container, lat, lon, latestLoc || locationName).catch(() => {});
+  }
+
+  async _ensureLeafletMC() {
+    if (window.L && window.L.map) return;
+    if (!document.getElementById("npt-leaflet-js")) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.id = "npt-leaflet-js";
+        s.src = _MC_LEAFLET_JS;
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    } else {
+      await new Promise((res) => {
+        const t = setInterval(() => { if (window.L) { clearInterval(t); res(); } }, 40);
+        setTimeout(() => { clearInterval(t); res(); }, 5000);
+      });
+    }
+  }
+
+  async _initLeafletMap(container, lat, lon, label) {
+    try { await this._ensureLeafletMC(); } catch(e) { return; }
+    const L = window.L;
+
+    if (this._leafletMap) {
+      this._leafletMap.setView([lat, lon], DEFAULT_ZOOM);
+      if (this._leafletMapMarker) {
+        this._leafletMapMarker.setLatLng([lat, lon]);
+        this._leafletMapMarker.setTooltipContent(label || "");
+      }
+      return;
     }
 
-    const entityConfig = { entity: this._config.entity };
-    haMap.hass = this._hass;
-    haMap.entities = [entityConfig];
-    haMap.zoom = DEFAULT_ZOOM;
+    container.innerHTML = "";
+    const mapDiv = document.createElement("div");
+    mapDiv.style.cssText = "width:100%;height:100%";
+    container.appendChild(mapDiv);
 
-    // ha-map renders the entity via hass + entities config
-    // If ha-map is unavailable (older HA), fall back to a coordinate display
-    if (typeof haMap.hass === "undefined") {
-      container.innerHTML = "";
-      const fb = document.createElement("div");
-      fb.style.cssText = "display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:4px;color:var(--secondary-text-color);font-size:0.85em";
-      const icon = document.createElement("ha-icon");
-      icon.setAttribute("icon", "mdi:map-marker");
-      icon.style.setProperty("--mdi-icon-size", "32px");
-      const nameSpan = document.createElement("span");
-      nameSpan.textContent = latestLoc || locationName;
-      const coordSpan = document.createElement("span");
-      coordSpan.style.fontSize = "0.8em";
-      coordSpan.textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-      fb.append(icon, nameSpan, coordSpan);
-      container.appendChild(fb);
-    }
+    const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false });
+    L.tileLayer(_MC_CARTO_TILES, { attribution: _MC_CARTO_ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
+    map.setView([lat, lon], DEFAULT_ZOOM);
+
+    const marker = L.circleMarker([lat, lon], {
+      radius: 10, color: "#1976d2", fillColor: "#42a5f5", fillOpacity: 0.85, weight: 2,
+    }).bindTooltip(label || "").addTo(map);
+
+    this._leafletMap = map;
+    this._leafletMapMarker = marker;
   }
 
   _updateEvents(container, rows) {
