@@ -486,7 +486,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       const cur = p.coords[0];
       const cx = toX(cur.lng), cy = toY(cur.lat);
       const isEmoji = p.icon && !p.icon.startsWith("mdi:") && !p.icon.startsWith("http");
-      const label = isEmoji ? p.icon : "📦";
+      const label = isEmoji ? p.icon : (p.delivered ? "✅" : "✈️");
       const cls = p.delivered ? "overview-dot-delivered" : "overview-dot";
 
       const currentDot = `
@@ -516,34 +516,66 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _renderRouteMap(state) {
     const coords = (state && state.attributes && state.attributes.route_coords) || [];
     if (coords.length === 0) return `<div class="map-empty">${this._t("No route data")}</div>`;
+    const isDelivered = /delivered|levert|hentet/i.test(state.state || "");
 
     const lats = coords.map((c) => c.lat);
     const lngs = coords.map((c) => c.lng);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-    const padPct = 0.1;
+    const padPct = 0.18;
     const dlat = (maxLat - minLat) || 0.05;
     const dlng = (maxLng - minLng) || 0.05;
-    const W = 480, H = 320;
-    const toX = (lng) => ((lng - (minLng - dlng * padPct)) / ((maxLng + dlng * padPct) - (minLng - dlng * padPct))) * W;
-    const toY = (lat) => H - ((lat - (minLat - dlat * padPct)) / ((maxLat + dlat * padPct) - (minLat - dlat * padPct))) * H;
+    const W = 500, H = 300;
+    const toX = (lng) => ((lng - (minLng - dlng * padPct)) / ((maxLng + dlng * padPct * 2) - (minLng - dlng * padPct))) * W;
+    const toY = (lat) => H - ((lat - (minLat - dlat * padPct)) / ((maxLat + dlat * padPct * 2) - (minLat - dlat * padPct))) * H;
 
-    const pointsStr = coords.map((c) => `${toX(c.lng).toFixed(1)},${toY(c.lat).toFixed(1)}`).join(" ");
-    const dots = coords.map((c, i) => {
+    // coords[0] = most recent; draw oldest→newest so path goes in travel order
+    const ordered = [...coords].reverse();
+    const pointsStr = ordered.map((c) => `${toX(c.lng).toFixed(1)},${toY(c.lat).toFixed(1)}`).join(" ");
+
+    // Compute plane rotation from last two points (newest direction of travel)
+    let planeRotation = -45;
+    if (coords.length >= 2) {
+      const dx = toX(coords[0].lng) - toX(coords[1].lng);
+      const dy = toY(coords[0].lat) - toY(coords[1].lat);
+      planeRotation = Math.atan2(dy, dx) * (180 / Math.PI);
+    }
+
+    const cur = coords[0];
+    const cx = toX(cur.lng), cy = toY(cur.lat);
+
+    const histDots = ordered.slice(0, -1).map((c, i) => {
       const x = toX(c.lng), y = toY(c.lat);
-      const label = (c.location || "").split(",")[0].slice(0, 20);
+      const label = (c.location || "").split(",")[0].slice(0, 22);
       return `
-        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${i === 0 ? 7 : 4}"
-          class="${i === 0 ? "route-dot-current" : "route-dot"}">
-          <title>${this._escHtml(c.date_iso ? c.date_iso.slice(0, 16).replace("T", " ") : "")} — ${this._escHtml(c.description || "")}</title>
+        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" class="route-dot">
+          <title>${this._escHtml(c.date_iso ? c.date_iso.slice(0,16).replace("T"," ") : "")} — ${this._escHtml(c.description || "")}</title>
         </circle>
-        ${label ? `<text x="${(x + 8).toFixed(1)}" y="${(y + 4).toFixed(1)}" class="route-label">${this._escHtml(label)}</text>` : ""}`;
+        ${label ? `<text x="${(x+7).toFixed(1)}" y="${(y+4).toFixed(1)}" class="route-label">${this._escHtml(label)}</text>` : ""}`;
     }).join("");
+
+    const curLabel = (cur.location || "").split(",")[0].slice(0, 22);
+    const planeEmoji = isDelivered ? "✅" : "✈️";
+    const currentMarker = `
+      <g transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})">
+        <circle r="14" class="route-dot-current-bg"/>
+        <text text-anchor="middle" dominant-baseline="central" font-size="16" class="plane-icon"
+          transform="rotate(${planeRotation.toFixed(0)})">${planeEmoji}</text>
+        <title>${this._escHtml(cur.date_iso ? cur.date_iso.slice(0,16).replace("T"," ") : "")} — ${this._escHtml(cur.description || "")}</title>
+      </g>
+      ${curLabel ? `<text x="${(cx+18).toFixed(1)}" y="${(cy-15).toFixed(1)}" class="route-label-cur">${this._escHtml(curLabel)}</text>` : ""}`;
 
     return `
       <svg class="route-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
         <polyline points="${pointsStr}" class="route-line" fill="none"/>
-        ${dots}
+        ${histDots}
+        ${currentMarker}
       </svg>`;
   }
 
@@ -603,10 +635,12 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .route-svg { width: 100%; max-height: 320px; background: var(--secondary-background-color, #181818); border-radius: 8px; border: 1px solid var(--divider-color, #333); margin-bottom: 12px; }
         .route-svg.overview-map { max-height: calc(100vh - 120px); min-height: 300px; }
         .route-line { stroke: var(--primary-color, #1976d2); stroke-width: 2; stroke-dasharray: 6,3; }
-        .route-dot { fill: var(--primary-color, #1976d2); opacity: 0.8; }
-        .route-dot-current { fill: #f50057; animation: pulse 1.5s ease-in-out infinite; }
-        @keyframes pulse { 0%,100%{r:7;opacity:1} 50%{r:10;opacity:0.6} }
+        .route-dot { fill: var(--primary-color, #1976d2); opacity: 0.75; }
+        .route-dot-current-bg { fill: var(--primary-color, #1976d2); opacity: 0.25; animation: ring-pulse 2s ease-in-out infinite; }
+        @keyframes ring-pulse { 0%,100%{r:14;opacity:0.25} 50%{r:20;opacity:0.08} }
+        .plane-icon { font-size: 16px; }
         .route-label { fill: var(--secondary-text-color, #aaa); font-size: 9px; }
+        .route-label-cur { fill: var(--primary-color, #42a5f5); font-size: 10px; font-weight: 600; }
         .map-empty { padding: 20px; opacity: 0.5; text-align: center; }
         .overview-dot { fill: var(--primary-color, #1976d2); opacity: 0.9; animation: pulse 2s ease-in-out infinite; }
         .overview-dot-delivered { fill: var(--success-color, #4caf50); opacity: 0.75; }
