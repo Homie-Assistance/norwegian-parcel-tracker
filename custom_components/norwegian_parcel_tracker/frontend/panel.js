@@ -712,6 +712,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false });
     L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
     map.fitBounds(L.latLngBounds(allLatLngs), { padding: [24, 24] });
+    this._leafletMap = map;
 
     parcelRoutes.forEach((p) => {
       const ordered = [...p.coords].reverse();
