@@ -239,6 +239,68 @@
           "description": "Sporingsnummeret til pakken du vil hente historikk for."
         }
       }
+    },
+    "set_note": {
+      "name": "Sett notat",
+      "description": "Legger til et eget notat på en pakke. Notatet vises av kort og panel i stedet for live-status mens det er satt.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken."
+        },
+        "text": {
+          "name": "Notatetekst",
+          "description": "Fritekst-notat — f.eks. 'Ringte kundeservice; omlevering fredag'. Maks 2000 tegn."
+        }
+      }
+    },
+    "clear_note": {
+      "name": "Fjern notat",
+      "description": "Fjerner et tidligere satt notat fra en pakke og gjenoppretter visning av live-sporingsdata.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken."
+        }
+      }
+    },
+    "set_icon": {
+      "name": "Sett ikon",
+      "description": "Setter et eget ikon for en pakke. Godtar MDI-ikonnavn (mdi:gift), ett emoji (🎁) eller en https://-bilde-URL.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken."
+        },
+        "icon": {
+          "name": "Ikon",
+          "description": "MDI-ikonnavn (f.eks. mdi:gift), emoji (f.eks. 🎁) eller https://-bilde-URL."
+        }
+      }
+    },
+    "clear_icon": {
+      "name": "Fjern ikon",
+      "description": "Fjerner et eget ikon fra en pakke og tilbakestiller til standard pakkeikonet.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken."
+        }
+      }
+    },
+    "rename_parcel": {
+      "name": "Gi pakke nytt navn",
+      "description": "Endrer visningsnavnet på en pakkeoppføring.",
+      "fields": {
+        "tracking_number": {
+          "name": "Sporingsnummer",
+          "description": "Sporingsnummeret til pakken som skal gis nytt navn."
+        },
+        "name": {
+          "name": "Nytt navn",
+          "description": "Det nye visningsnavnet for pakken."
+        }
+      }
     }
   }
 }

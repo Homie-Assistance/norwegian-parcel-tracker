@@ -29,3 +29,51 @@ get_parcel_history:
       required: true
       selector:
         text:
+
+set_note:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+    text:
+      required: true
+      selector:
+        text:
+          multiline: true
+
+clear_note:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+
+set_icon:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+    icon:
+      required: true
+      selector:
+        text:
+
+clear_icon:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+
+rename_parcel:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+    name:
+      required: true
+      selector:
+        text:

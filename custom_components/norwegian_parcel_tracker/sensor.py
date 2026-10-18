@@ -82,7 +82,7 @@ class BaseParcelSensor(CoordinatorEntity[PostenTrackingCoordinator], SensorEntit
 
 
 class ParcelStatusSensor(BaseParcelSensor):
-    _unrecorded_attributes = frozenset({"recent_events"})
+    _unrecorded_attributes = frozenset({"recent_events", "route_coords"})
 
     def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "status")
 
@@ -101,6 +101,17 @@ class ParcelStatusSensor(BaseParcelSensor):
         attrs["refreshing"] = self.coordinator._refreshing
         attrs.update(self.coordinator.fits_attributes)
         attrs["recent_events"] = self.coordinator._history.recent(10)
+        if self.coordinator._route_coords:
+            attrs["route_coords"] = self.coordinator._route_coords
+        meta_store = self.hass.data.get(DOMAIN, {}).get("_meta")
+        if meta_store:
+            meta = meta_store.get(self.coordinator.tracking_number)
+            if meta.get("note"):
+                attrs["note"] = meta["note"]
+            if meta.get("npt_icon"):
+                attrs["npt_icon"] = meta["npt_icon"]
+            if meta.get("display_name"):
+                attrs["display_name"] = meta["display_name"]
         return attrs
 
 

@@ -10,6 +10,7 @@ from .api import ParcelEvent
 _STORE_VERSION = 1
 _HISTORY_KEY_PREFIX = "norwegian_parcel_tracker_history_"
 _STATS_KEY = "norwegian_parcel_tracker_delivery_stats"
+_META_KEY = "norwegian_parcel_tracker_meta"
 _MAX_EVENTS = 500
 _SAVE_DELAY = 30
 
@@ -129,3 +130,47 @@ class DeliveryStatsStore:
 
     def get_records(self) -> list[dict[str, Any]]:
         return list(self._records)
+
+
+class ParcelMetaStore:
+    """Stores user-set note, npt_icon, and display_name per tracking number."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._store: Store = Store(hass, _STORE_VERSION, _META_KEY, atomic_writes=True)
+        self._data: dict[str, dict[str, Any]] = {}
+
+    async def async_load(self) -> None:
+        raw = await self._store.async_load() or {}
+        self._data = raw.get("parcels", {})
+
+    def get(self, tracking_number: str) -> dict[str, Any]:
+        return dict(self._data.get(tracking_number.upper(), {}))
+
+    async def async_set(self, tracking_number: str, **fields: Any) -> None:
+        key = tracking_number.upper()
+        entry = dict(self._data.get(key, {}))
+        for k, v in fields.items():
+            if v is None:
+                entry.pop(k, None)
+            else:
+                entry[k] = v
+        self._data[key] = entry
+        self._store.async_delay_save(
+            lambda: {"version": _STORE_VERSION, "parcels": dict(self._data)}, _SAVE_DELAY
+        )
+
+    async def async_clear_field(self, tracking_number: str, field: str) -> None:
+        key = tracking_number.upper()
+        entry = dict(self._data.get(key, {}))
+        entry.pop(field, None)
+        self._data[key] = entry
+        self._store.async_delay_save(
+            lambda: {"version": _STORE_VERSION, "parcels": dict(self._data)}, _SAVE_DELAY
+        )
+
+    async def async_clear(self, tracking_number: str) -> None:
+        key = tracking_number.upper()
+        self._data.pop(key, None)
+        self._store.async_delay_save(
+            lambda: {"version": _STORE_VERSION, "parcels": dict(self._data)}, _SAVE_DELAY
+        )

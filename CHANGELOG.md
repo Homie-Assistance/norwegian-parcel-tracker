@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.0
+
+### New features
+
+- **Sidebar panel**: a "Parcels" entry now appears in the HA left sidebar (like Energy or History). The panel shows a two-column layout — parcel table on the left; SVG route map + detail pane on the right. Clicking a row opens full event history, inline note/rename/icon editors, a carrier phone link (`tel:`), and a DuckDuckGo delay-search shortcut. Requires `frontend/panel.js` (shipped in the integration directory).
+- **Per-parcel notes** (`set_note` / `clear_note`): attach a free-text note (up to 2000 chars) to any parcel. While a note is set it is exposed as the `note` sensor attribute and displayed in place of the live status in cards and the panel. Stored in HA `.storage` (`norwegian_parcel_tracker_meta`) and survives HA restarts.
+- **Custom icons** (`set_icon` / `clear_icon`): assign an `mdi:icon-name`, an emoji (≤10 chars), or an `https://` image URL. Stored alongside the note in `.storage`, exposed as `npt_icon` sensor attribute, rendered in all card views and in the panel table.
+- **Rename** (`rename_parcel`): set a friendly display name for a parcel. Writes to the config entry title, `entry.data["name"]`, and the device registry. Exposed as `display_name` sensor attribute.
+- **Route coordinates**: after each update the integration geocodes all event locations in the background (via the existing Nominatim cache, rate-limited to 1 req/s, capped at 50 stops). Results are stored on the coordinator and exposed as the `route_coords` sensor attribute — a list of `{lat, lng, description, date_iso, location}` objects ordered most-recent-first. Not recorded by the HA recorder (`_unrecorded_attributes`).
+
+### New services
+
+| Service | Required fields | Description |
+|---|---|---|
+| `set_note` | `tracking_number`, `text` | Attach a note (max 2000 chars) |
+| `clear_note` | `tracking_number` | Remove the note |
+| `set_icon` | `tracking_number`, `icon` | Set icon (`mdi:`, emoji, or `https://` URL) |
+| `clear_icon` | `tracking_number` | Remove the custom icon |
+| `rename_parcel` | `tracking_number`, `name` | Set a display name (1–100 chars) |
+
+### Other changes
+
+- `manifest.json` version bumped to `2.0.0`; added `after_dependencies: ["frontend", "http", "panel_custom"]`.
+- Panel and services are guard-registered (safe to reload without duplicate registration).
+- Meta store entries are cleaned up when a parcel entry is removed.
+- `async_update_listeners()` (not `async_request_refresh()`) is used after meta changes — propagates to the UI immediately without triggering a carrier API call.
+
 ## 1.3.2
 
 - Fixed critical bug: `'NoneType' object can't be awaited` on all parcel entries. `Store.async_delay_save` is a synchronous HA callback, not a coroutine; awaiting it returned `None` which crashed every parcel entry setup.

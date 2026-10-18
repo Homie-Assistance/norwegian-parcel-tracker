@@ -74,6 +74,8 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._stats: DeliveryStatsStore = hass.data[DOMAIN]["_stats"]
         self._location_coords: tuple[float, float] | None = None
         self._last_geocoded_key: str | None = None
+        self._route_coords: list[dict] = []
+        self._route_task_running: bool = False
         super().__init__(
             hass,
             _LOGGER,
@@ -164,6 +166,11 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         await self._history.async_save()
         await self._async_handle_side_effects(parcel)
         await self._async_update_geocode(parcel)
+        if not self._route_task_running:
+            self.hass.async_create_background_task(
+                self._async_build_route_coords(parcel),
+                name=f"npt_route_{self.tracking_number}",
+            )
         return parcel
 
     async def _async_handle_side_effects(self, parcel: ParcelData) -> None:
@@ -193,7 +200,9 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             return
         raw = latest.raw or {}
         postal = raw.get("postalCode") or ""
-        city = raw.get("city") or (latest.location or "").split()[-1] if latest.location else ""
+        city = raw.get("city") or ""
+        if not city and latest.location:
+            city = (latest.location or "").split()[-1]
         country = raw.get("countryCode") or "NO"
         key = f"{country}|{postal}|{city}".lower()
         if key == self._last_geocoded_key or not (postal or city):
@@ -204,6 +213,43 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         coords = await geocoder.geocode(postal or None, city or None, country)
         self._last_geocoded_key = key
         self._location_coords = coords
+
+    async def _async_build_route_coords(self, parcel: ParcelData) -> None:
+        """Geocode all unique event locations and build the route coords list."""
+        if self._route_task_running:
+            return
+        self._route_task_running = True
+        try:
+            geocoder: NominatimGeocoder | None = self.hass.data.get(DOMAIN, {}).get("_geocoder")
+            if geocoder is None:
+                return
+            seen_keys: set[str] = set()
+            route: list[dict] = []
+            events = (parcel.events or [])[:50]
+            for event in events:
+                raw = event.raw or {}
+                postal = raw.get("postalCode") or ""
+                city = raw.get("city") or ""
+                if not city and event.location:
+                    city = (event.location or "").split()[-1]
+                country = raw.get("countryCode") or "NO"
+                loc_key = f"{country}|{postal}|{city}".lower()
+                if not (postal or city) or loc_key in seen_keys:
+                    continue
+                seen_keys.add(loc_key)
+                coords = await geocoder.geocode(postal or None, city or None, country)
+                if coords:
+                    route.append({
+                        "lat": coords[0],
+                        "lng": coords[1],
+                        "description": event.description,
+                        "date_iso": event.date_iso,
+                        "location": event.location,
+                    })
+            self._route_coords = route
+        finally:
+            self._route_task_running = False
+            self.async_update_listeners()
 
     async def _async_handle_auto_delete(self, parcel: ParcelData) -> None:
         global_opts = self._get_global_options()
