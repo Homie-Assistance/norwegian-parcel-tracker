@@ -34,6 +34,11 @@ const _NO = {
   "📝 Note": "📝 Notat",
 };
 
+const _CARTO_TILES = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+const _CARTO_ATTR = "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>";
+const _LEAFLET_CSS = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+const _LEAFLET_JS  = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+
 class NorwegianParcelTrackerPanel extends HTMLElement {
   constructor() {
     super();
@@ -41,6 +46,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._parcels = [];
     this._selected = null;
     this._shadow = this.attachShadow({ mode: "open" });
+    this._leafletMap = null;
     const lang = (navigator.language || "").toLowerCase();
     this._isNo = lang.startsWith("nb") || lang.startsWith("no") || lang.startsWith("nn");
   }
@@ -422,161 +428,27 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   }
 
   _renderAllParcelsMap(parcels) {
-    const COLORS = ["#42a5f5","#ef5350","#66bb6a","#ffa726","#ab47bc","#26c6da","#ec407a","#8d6e63"];
-
-    const parcelRoutes = parcels
-      .filter((s) => s.attributes.route_coords && s.attributes.route_coords.length > 0)
-      .map((s, i) => ({
-        entityId: s.entity_id,
-        name: (s.attributes.display_name || s.attributes.sender_name || s.attributes.tracking_number || "").slice(0, 24),
-        icon: s.attributes.npt_icon || "",
-        delivered: /delivered|levert|hentet/i.test(s.state || ""),
-        coords: s.attributes.route_coords,
-        color: COLORS[i % COLORS.length],
-        colorIdx: i % COLORS.length,
-      }));
-
-    const noDataParcels = parcels.filter(
-      (s) => !s.attributes.route_coords || s.attributes.route_coords.length === 0
-    );
-
-    if (parcelRoutes.length === 0) {
+    const hasRoutes = parcels.some((s) => s.attributes.route_coords && s.attributes.route_coords.length > 0);
+    if (!hasRoutes) {
       const msg = this._isNo
         ? "Ingen posisjonsdata ennå — pakkeposisjonene vises her etter hvert som de spores."
         : "No location data yet — parcel positions will appear here as events are tracked.";
       return `<div class="map-empty" style="padding-top:40px">${msg}</div>`;
     }
-
-    const allCoords = parcelRoutes.flatMap((p) => p.coords);
-    const lats = allCoords.map((c) => c.lat);
-    const lngs = allCoords.map((c) => c.lng);
-    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-    const dLat = (maxLat - minLat) || 0.5;
-    const dLng = (maxLng - minLng) || 0.5;
-    const pad = 0.15;
-    const vMinLat = minLat - dLat * pad, vMaxLat = maxLat + dLat * pad;
-    const vMinLng = minLng - dLng * pad, vMaxLng = maxLng + dLng * pad;
-
-    const W = 700, H = 420;
-    const toX = (lng) => ((lng - vMinLng) / (vMaxLng - vMinLng)) * W;
-    const toY = (lat) => H - ((lat - vMinLat) / (vMaxLat - vMinLat)) * H;
-
-    const defs = COLORS.map((c, i) => `
-      <marker id="arr-${i}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-        <path d="M0,1 L0,9 L10,5 z" fill="${c}" opacity="0.85"/>
-      </marker>`).join("");
-
-    const routeSvg = parcelRoutes.map((p) => {
-      const { color, colorIdx } = p;
-      // coords[0] = most recent; reverse to draw oldest → newest
-      const ordered = [...p.coords].reverse();
-
-      const segments = ordered.slice(0, -1).map((c, i) => {
-        const x1 = toX(c.lng).toFixed(1), y1 = toY(c.lat).toFixed(1);
-        const x2 = toX(ordered[i + 1].lng).toFixed(1), y2 = toY(ordered[i + 1].lat).toFixed(1);
-        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2.5" stroke-opacity="0.65" marker-end="url(#arr-${colorIdx})"/>`;
-      }).join("");
-
-      const histDots = ordered.slice(0, -1).map((c) => {
-        const x = toX(c.lng).toFixed(1), y = toY(c.lat).toFixed(1);
-        return `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}" opacity="0.45"><title>${this._escHtml((c.date_iso || "").slice(0, 16).replace("T", " "))} — ${this._escHtml(c.description || "")}</title></circle>`;
-      }).join("");
-
-      const cur = p.coords[0];
-      const cx = toX(cur.lng), cy = toY(cur.lat);
-      const isEmoji = p.icon && !p.icon.startsWith("mdi:") && !p.icon.startsWith("http");
-      const label = isEmoji ? p.icon : (p.delivered ? "✅" : "✈️");
-      const cls = p.delivered ? "overview-dot-delivered" : "overview-dot";
-
-      const currentDot = `
-        <g class="overview-parcel" data-id="${this._escHtml(p.entityId)}" style="cursor:pointer" tabindex="0">
-          <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="14" class="${cls}" stroke="${color}" stroke-width="2"/>
-          <text x="${cx.toFixed(1)}" y="${(cy + 5).toFixed(1)}" text-anchor="middle" font-size="13" style="pointer-events:none">${this._escHtml(label)}</text>
-          ${p.name ? `<text x="${(cx + 18).toFixed(1)}" y="${(cy - 13).toFixed(1)}" class="route-label" font-size="10" fill="${color}" font-weight="600">${this._escHtml(p.name)}</text>` : ""}
-          <title>${this._escHtml(p.name)}</title>
-        </g>`;
-
-      return segments + histDots + currentDot;
-    }).join("");
-
+    const noDataParcels = parcels.filter((s) => !s.attributes.route_coords || s.attributes.route_coords.length === 0);
     const noDataHtml = noDataParcels.length > 0
-      ? `<div style="font-size:0.8em;opacity:0.5;margin-top:8px">No location data yet: ${noDataParcels.map((s) => this._escHtml(s.attributes.display_name || s.attributes.sender_name || s.attributes.tracking_number || s.entity_id)).join(", ")}</div>`
+      ? `<div style="font-size:0.8em;opacity:0.5;margin-top:8px">${this._isNo ? "Ingen rutedata ennå:" : "No location data yet:"} ${noDataParcels.map((s) => this._escHtml(s.attributes.display_name || s.attributes.sender_name || s.attributes.tracking_number || s.entity_id)).join(", ")}</div>`
       : "";
-
     return `
       <div style="font-size:0.78em;opacity:0.55;padding:0 0 6px">${this._t("All parcel routes — click a dot to view details & route")}</div>
-      <svg class="route-svg overview-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-        <defs>${defs}</defs>
-        ${routeSvg}
-      </svg>
+      <div id="npt-overview-map" class="leaflet-map-overview"></div>
       ${noDataHtml}`;
   }
 
   _renderRouteMap(state) {
     const coords = (state && state.attributes && state.attributes.route_coords) || [];
     if (coords.length === 0) return `<div class="map-empty">${this._t("No route data")}</div>`;
-    const isDelivered = /delivered|levert|hentet/i.test(state.state || "");
-
-    const lats = coords.map((c) => c.lat);
-    const lngs = coords.map((c) => c.lng);
-    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-    const padPct = 0.18;
-    const dlat = (maxLat - minLat) || 0.05;
-    const dlng = (maxLng - minLng) || 0.05;
-    const W = 500, H = 300;
-    const toX = (lng) => ((lng - (minLng - dlng * padPct)) / ((maxLng + dlng * padPct * 2) - (minLng - dlng * padPct))) * W;
-    const toY = (lat) => H - ((lat - (minLat - dlat * padPct)) / ((maxLat + dlat * padPct * 2) - (minLat - dlat * padPct))) * H;
-
-    // coords[0] = most recent; draw oldest→newest so path goes in travel order
-    const ordered = [...coords].reverse();
-    const pointsStr = ordered.map((c) => `${toX(c.lng).toFixed(1)},${toY(c.lat).toFixed(1)}`).join(" ");
-
-    // Compute plane rotation from last two points (newest direction of travel)
-    let planeRotation = -45;
-    if (coords.length >= 2) {
-      const dx = toX(coords[0].lng) - toX(coords[1].lng);
-      const dy = toY(coords[0].lat) - toY(coords[1].lat);
-      planeRotation = Math.atan2(dy, dx) * (180 / Math.PI);
-    }
-
-    const cur = coords[0];
-    const cx = toX(cur.lng), cy = toY(cur.lat);
-
-    const histDots = ordered.slice(0, -1).map((c, i) => {
-      const x = toX(c.lng), y = toY(c.lat);
-      const label = (c.location || "").split(",")[0].slice(0, 22);
-      return `
-        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" class="route-dot">
-          <title>${this._escHtml(c.date_iso ? c.date_iso.slice(0,16).replace("T"," ") : "")} — ${this._escHtml(c.description || "")}</title>
-        </circle>
-        ${label ? `<text x="${(x+7).toFixed(1)}" y="${(y+4).toFixed(1)}" class="route-label">${this._escHtml(label)}</text>` : ""}`;
-    }).join("");
-
-    const curLabel = (cur.location || "").split(",")[0].slice(0, 22);
-    const planeEmoji = isDelivered ? "✅" : "✈️";
-    const currentMarker = `
-      <g transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})">
-        <circle r="14" class="route-dot-current-bg"/>
-        <text text-anchor="middle" dominant-baseline="central" font-size="16" class="plane-icon"
-          transform="rotate(${planeRotation.toFixed(0)})">${planeEmoji}</text>
-        <title>${this._escHtml(cur.date_iso ? cur.date_iso.slice(0,16).replace("T"," ") : "")} — ${this._escHtml(cur.description || "")}</title>
-      </g>
-      ${curLabel ? `<text x="${(cx+18).toFixed(1)}" y="${(cy-15).toFixed(1)}" class="route-label-cur">${this._escHtml(curLabel)}</text>` : ""}`;
-
-    return `
-      <svg class="route-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="2" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-        <polyline points="${pointsStr}" class="route-line" fill="none"/>
-        ${histDots}
-        ${currentMarker}
-      </svg>`;
+    return `<div id="npt-route-map" class="leaflet-map-route"></div>`;
   }
 
   _render() {
@@ -608,7 +480,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         </tr>`;
     }).join("");
 
+    if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
+
     this._shadow.innerHTML = `
+      <link rel="stylesheet" href="${_LEAFLET_CSS}">
       <style>
         :host { display: flex; flex-direction: column; height: 100%; background: var(--primary-background-color, #111); color: var(--primary-text-color, #eee); font-family: var(--paper-font-body1_-_font-family, sans-serif); }
         .panel-header { display: flex; align-items: center; padding: 12px 16px; background: var(--app-header-background-color, #1976d2); color: var(--app-header-text-color, #fff); font-size: 1.2em; font-weight: 600; }
@@ -635,20 +510,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .col-loc-time { font-size: 0.85em; opacity: 0.5; display: block; }
         .col-note { font-size: 0.78em; color: #ffd740; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
         .col-note:hover { text-decoration: underline; }
-        .route-svg { width: 100%; max-height: 320px; background: var(--secondary-background-color, #181818); border-radius: 8px; border: 1px solid var(--divider-color, #333); margin-bottom: 12px; }
-        .route-svg.overview-map { max-height: calc(100vh - 120px); min-height: 300px; }
-        .route-line { stroke: var(--primary-color, #1976d2); stroke-width: 2; stroke-dasharray: 6,3; }
-        .route-dot { fill: var(--primary-color, #1976d2); opacity: 0.75; }
-        .route-dot-current-bg { fill: var(--primary-color, #1976d2); opacity: 0.25; animation: ring-pulse 2s ease-in-out infinite; }
-        @keyframes ring-pulse { 0%,100%{r:14;opacity:0.25} 50%{r:20;opacity:0.08} }
-        .plane-icon { font-size: 16px; }
-        .route-label { fill: var(--secondary-text-color, #aaa); font-size: 9px; }
-        .route-label-cur { fill: var(--primary-color, #42a5f5); font-size: 10px; font-weight: 600; }
+        .leaflet-map-route { height: 280px; width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 12px; border: 1px solid var(--divider-color, #333); }
+        .leaflet-map-overview { height: calc(100vh - 160px); min-height: 300px; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--divider-color, #333); }
         .map-empty { padding: 20px; opacity: 0.5; text-align: center; }
-        .overview-dot { fill: var(--primary-color, #1976d2); opacity: 0.9; animation: pulse 2s ease-in-out infinite; }
-        .overview-dot-delivered { fill: var(--success-color, #4caf50); opacity: 0.75; }
-        .overview-parcel:hover .overview-dot,
-        .overview-parcel:hover .overview-dot-delivered { opacity: 1; filter: brightness(1.15); }
         .detail-pane { max-width: 720px; }
         .detail-pane h2 { margin: 0 0 4px; font-size: 1.1em; }
         .detail-tracking { font-size: 0.8em; opacity: 0.6; margin-bottom: 12px; }
@@ -720,9 +584,6 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._shadow.querySelectorAll(".parcel-row").forEach((row) => {
       row.addEventListener("click", () => this._selectParcel(row.dataset.id));
     });
-    this._shadow.querySelectorAll(".overview-parcel").forEach((g) => {
-      g.addEventListener("click", () => this._selectParcel(g.dataset.id));
-    });
 
     if (selected) {
       const tn = selected.attributes.tracking_number || selected.entity_id;
@@ -742,9 +603,148 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       this._shadow.getElementById("btn-refresh")?.addEventListener("click", () =>
         this._callService("norwegian_parcel_tracker", "refresh", { tracking_number: tn }));
     }
+
+    this._initLeafletMaps().catch(() => {});
   }
 
   connectedCallback() { this._render(); }
+
+  async _ensureLeaflet() {
+    if (window.L && window.L.map) return;
+    if (document.getElementById("npt-leaflet-js")) {
+      await new Promise((res) => {
+        const t = setInterval(() => { if (window.L) { clearInterval(t); res(); } }, 40);
+        setTimeout(() => { clearInterval(t); res(); }, 5000);
+      });
+      return;
+    }
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.id = "npt-leaflet-js";
+      s.src = _LEAFLET_JS;
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    if (!document.getElementById("npt-map-icon-styles")) {
+      const st = document.createElement("style");
+      st.id = "npt-map-icon-styles";
+      st.textContent = [
+        ".npt-plane-wrap{background:none!important;border:none!important;box-shadow:none!important;}",
+        ".npt-plane{font-size:22px;line-height:1;display:block;animation:npt-glow 2s ease-in-out infinite;}",
+        "@keyframes npt-glow{0%,100%{filter:drop-shadow(0 0 3px rgba(66,165,245,.4))}50%{filter:drop-shadow(0 0 10px rgba(66,165,245,.9))}}",
+        ".npt-stop-label{background:rgba(0,0,0,.55);color:#fff;padding:2px 5px;border-radius:3px;font-size:11px;white-space:nowrap;}",
+      ].join("");
+      document.head.appendChild(st);
+    }
+  }
+
+  async _initLeafletMaps() {
+    const selected = this._selected ? this._parcels.find((s) => s.entity_id === this._selected) : null;
+    if (selected) {
+      await this._initRouteMap(selected);
+    } else {
+      await this._initOverviewMap(this._parcels);
+    }
+  }
+
+  async _initRouteMap(state) {
+    const mapDiv = this._shadow.getElementById("npt-route-map");
+    if (!mapDiv) return;
+    const coords = (state.attributes && state.attributes.route_coords) || [];
+    if (coords.length === 0) return;
+    try { await this._ensureLeaflet(); } catch (e) { return; }
+    const L = window.L;
+
+    const ordered = [...coords].reverse();
+    const latLngs = ordered.map((c) => [c.lat, c.lng]);
+    const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
+    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
+    map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24] });
+    this._leafletMap = map;
+
+    L.polyline(latLngs, { color: "#42a5f5", weight: 3.5, opacity: 0.8, dashArray: "6 4" }).addTo(map);
+
+    ordered.slice(0, -1).forEach((c) => {
+      const tip = `${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`;
+      L.circleMarker([c.lat, c.lng], { radius: 5, color: "#42a5f5", fillColor: "#42a5f5", fillOpacity: 0.5, weight: 1.5 })
+        .bindTooltip(tip).addTo(map);
+    });
+
+    const cur = coords[0];
+    const isDelivered = /delivered|levert|hentet/i.test(state.state || "");
+    const planeEmoji = isDelivered ? "✅" : "✈️";
+    let bearing = 0;
+    if (coords.length >= 2) {
+      const dLat = coords[0].lat - coords[1].lat;
+      const dLng = coords[0].lng - coords[1].lng;
+      bearing = Math.atan2(dLng, dLat) * (180 / Math.PI);
+    }
+    const planeIcon = L.divIcon({
+      html: `<div class="npt-plane" style="transform:rotate(${bearing.toFixed(0)}deg)">${planeEmoji}</div>`,
+      className: "npt-plane-wrap",
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+    });
+    L.marker([cur.lat, cur.lng], { icon: planeIcon })
+      .bindTooltip(`${(cur.date_iso || "").slice(0, 16).replace("T", " ")} — ${cur.description || ""}`)
+      .addTo(map);
+  }
+
+  async _initOverviewMap(parcels) {
+    const mapDiv = this._shadow.getElementById("npt-overview-map");
+    if (!mapDiv) return;
+    const COLORS = ["#42a5f5","#ef5350","#66bb6a","#ffa726","#ab47bc","#26c6da","#ec407a","#8d6e63"];
+    const parcelRoutes = parcels
+      .filter((s) => s.attributes.route_coords && s.attributes.route_coords.length > 0)
+      .map((s, i) => ({
+        entityId: s.entity_id,
+        name: (s.attributes.display_name || s.attributes.sender_name || s.attributes.tracking_number || "").slice(0, 24),
+        icon: s.attributes.npt_icon || "",
+        delivered: /delivered|levert|hentet/i.test(s.state || ""),
+        coords: s.attributes.route_coords,
+        color: COLORS[i % COLORS.length],
+      }));
+    if (parcelRoutes.length === 0) return;
+    try { await this._ensureLeaflet(); } catch (e) { return; }
+    const L = window.L;
+
+    const allLatLngs = parcelRoutes.flatMap((p) => p.coords.map((c) => [c.lat, c.lng]));
+    const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false });
+    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
+    map.fitBounds(L.latLngBounds(allLatLngs), { padding: [24, 24] });
+
+    parcelRoutes.forEach((p) => {
+      const ordered = [...p.coords].reverse();
+      const latLngs = ordered.map((c) => [c.lat, c.lng]);
+      L.polyline(latLngs, { color: p.color, weight: 2.5, opacity: 0.7 }).addTo(map);
+
+      ordered.slice(0, -1).forEach((c) => {
+        L.circleMarker([c.lat, c.lng], { radius: 4, color: p.color, fillColor: p.color, fillOpacity: 0.4, weight: 1 })
+          .bindTooltip(`${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`)
+          .addTo(map);
+      });
+
+      const cur = p.coords[0];
+      const isEmoji = p.icon && !p.icon.startsWith("mdi:") && !p.icon.startsWith("http");
+      const label = isEmoji ? p.icon : (p.delivered ? "✅" : "✈️");
+      let bearing = 0;
+      if (p.coords.length >= 2) {
+        const dLat = p.coords[0].lat - p.coords[1].lat;
+        const dLng = p.coords[0].lng - p.coords[1].lng;
+        bearing = Math.atan2(dLng, dLat) * (180 / Math.PI);
+      }
+      const icon = L.divIcon({
+        html: `<div style="transform:rotate(${bearing.toFixed(0)}deg);font-size:20px;line-height:1">${label}</div>`,
+        className: "npt-plane-wrap",
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+      L.marker([cur.lat, cur.lng], { icon })
+        .bindTooltip(p.name || cur.description || "")
+        .on("click", () => this._selectParcel(p.entityId))
+        .addTo(map);
+    });
+  }
 }
 
 customElements.define("norwegian-parcel-tracker-panel", NorwegianParcelTrackerPanel);
