@@ -558,14 +558,19 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       const a = s.attributes;
       const icon = this._renderIcon(a.npt_icon);
       const name = a.display_name || a.sender_name || a.tracking_number || s.entity_id;
-      const status = a.note ? "📝 " + a.note.slice(0, 60) : (s.state || "");
+      const status = s.state || "";
       const isActive = s.entity_id === this._selected;
+      const loc = ((a.route_coords && a.route_coords[0] && a.route_coords[0].location) || "").split(",")[0].trim();
+      const notePreview = a.note ? a.note.slice(0, 45) + (a.note.length > 45 ? "…" : "") : "";
+      const tn = a.tracking_number || s.entity_id;
       return `
         <tr class="parcel-row ${isActive ? "selected" : ""}" data-id="${s.entity_id}">
           <td class="col-icon">${icon}</td>
           <td class="col-name">${this._escHtml(name)}</td>
           <td class="col-status">${this._escHtml(status)}</td>
-          <td class="col-eta">${this._escHtml(a.estimated_delivery_iso || "")}</td>
+          <td class="col-loc">${this._escHtml(loc)}</td>
+          <td class="col-eta">${this._escHtml(a.estimated_delivery_iso ? a.estimated_delivery_iso.slice(0,10) : "")}</td>
+          ${notePreview ? `<td class="col-note" data-tn="${this._escHtml(tn)}" data-note="${this._escHtml(a.note || "")}">📝 ${this._escHtml(notePreview)}</td>` : "<td></td>"}
         </tr>`;
     }).join("");
 
@@ -578,7 +583,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .btn-settings { background: transparent; border: none; color: var(--app-header-text-color,#fff); cursor: pointer; font-size: 1.1em; padding: 4px 8px; border-radius: 4px; opacity: 0.8; }
         .btn-settings:hover { opacity: 1; background: rgba(255,255,255,0.12); }
         .panel-body { display: flex; flex: 1; overflow: hidden; }
-        .left-pane { width: 380px; min-width: 260px; display: flex; flex-direction: column; border-right: 1px solid var(--divider-color, #333); overflow: hidden; }
+        .left-pane { width: 44%; min-width: 280px; display: flex; flex-direction: column; border-right: 1px solid var(--divider-color, #333); overflow: hidden; }
+        .no-selected .left-pane { width: 100%; border-right: none; }
         .right-pane { flex: 1; overflow: auto; padding: 12px; }
         .parcel-table { width: 100%; border-collapse: collapse; overflow-y: auto; }
         .parcel-table th { text-align: left; padding: 6px 8px; font-size: 0.75em; text-transform: uppercase; opacity: 0.6; border-bottom: 1px solid var(--divider-color, #333); }
@@ -589,8 +595,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .col-icon { width: 32px; }
         .parcel-icon-img { width: 24px; height: 24px; border-radius: 4px; object-fit: contain; }
         .parcel-icon-emoji { font-size: 20px; }
-        .col-status { font-size: 0.85em; opacity: 0.8; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-status { font-size: 0.85em; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .col-eta { font-size: 0.75em; opacity: 0.6; white-space: nowrap; }
+        .col-loc { font-size: 0.78em; opacity: 0.65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-note { font-size: 0.78em; color: #ffd740; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+        .col-note:hover { text-decoration: underline; }
         .route-svg { width: 100%; max-height: 320px; background: var(--secondary-background-color, #181818); border-radius: 8px; border: 1px solid var(--divider-color, #333); margin-bottom: 12px; }
         .route-svg.overview-map { max-height: calc(100vh - 120px); min-height: 300px; }
         .route-line { stroke: var(--primary-color, #1976d2); stroke-width: 2; stroke-dasharray: 6,3; }
@@ -639,16 +648,16 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         <span class="panel-header-title">Pakker</span>
         <button class="btn-settings" id="btn-settings" title="Innstillinger">⚙️</button>
       </div>
-      <div class="panel-body">
+      <div class="panel-body ${selected ? "" : "no-selected"}">
         <div class="left-pane">
           ${parcels.length === 0
             ? `<div class="no-parcels">${this._t("No parcels tracked.")}<br>${this._t("Add one via the integration.")}</div>`
             : `<table class="parcel-table">
                 <colgroup>
-                  <col style="width:36px"><col style="width:28%"><col><col style="width:115px">
+                  <col style="width:36px"><col style="width:22%"><col><col style="width:18%"><col style="width:88px"><col style="width:22%">
                 </colgroup>
                 <thead><tr>
-                  <th></th><th>Pakke</th><th>Status</th><th>ETA</th>
+                  <th></th><th>${this._isNo ? "Pakke" : "Package"}</th><th>Status</th><th>${this._isNo ? "Sted" : "Location"}</th><th>ETA</th><th>${this._isNo ? "Notat" : "Note"}</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
               </table>`
@@ -663,6 +672,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       </div>`;
 
     this._shadow.getElementById("btn-settings")?.addEventListener("click", () => this._showSettingsDialog());
+
+    this._shadow.querySelectorAll(".col-note[data-tn]").forEach((cell) => {
+      cell.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._showNoteDialog(cell.dataset.tn, cell.dataset.note || "");
+      });
+    });
 
     this._shadow.querySelectorAll(".parcel-row").forEach((row) => {
       row.addEventListener("click", () => this._selectParcel(row.dataset.id));
