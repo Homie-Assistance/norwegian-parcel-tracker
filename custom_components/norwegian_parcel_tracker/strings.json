@@ -239,6 +239,68 @@
           "description": "Tracking number of the parcel to retrieve history for."
         }
       }
+    },
+    "set_note": {
+      "name": "Set note",
+      "description": "Attaches a custom note to a parcel. While set, the note is displayed by the card and panel in place of the live status.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel."
+        },
+        "text": {
+          "name": "Note text",
+          "description": "Free-form note — e.g. 'Called support; redelivery Friday'. Maximum 2000 characters."
+        }
+      }
+    },
+    "clear_note": {
+      "name": "Clear note",
+      "description": "Removes a previously set note from a parcel, resuming display of live tracking data.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel."
+        }
+      }
+    },
+    "set_icon": {
+      "name": "Set icon",
+      "description": "Sets a custom icon for a parcel. Accepts an MDI icon name (mdi:gift), a single emoji (🎁), or an https:// image URL.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel."
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "MDI icon name (e.g. mdi:gift), emoji (e.g. 🎁), or https:// image URL."
+        }
+      }
+    },
+    "clear_icon": {
+      "name": "Clear icon",
+      "description": "Removes a custom icon from a parcel, reverting to the default package icon.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel."
+        }
+      }
+    },
+    "rename_parcel": {
+      "name": "Rename parcel",
+      "description": "Changes the display name of a parcel entry.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel to rename."
+        },
+        "name": {
+          "name": "New name",
+          "description": "The new display name for the parcel."
+        }
+      }
     }
   }
 }

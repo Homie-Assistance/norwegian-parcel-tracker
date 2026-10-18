@@ -9,6 +9,8 @@ for mod in [
     "homeassistant",
     "homeassistant.components",
     "homeassistant.components.device_tracker",
+    "homeassistant.components.http",
+    "homeassistant.components.panel_custom",
     "homeassistant.config_entries",
     "homeassistant.core",
     "homeassistant.helpers",
