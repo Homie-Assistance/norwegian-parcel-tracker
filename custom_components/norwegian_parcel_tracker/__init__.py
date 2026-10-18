@@ -228,6 +228,23 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
         if meta:
             await meta.async_clear_field(tracking_number, "note")
+            await meta.async_clear_field(tracking_number, "notes")
+            _async_refresh_coordinator_listeners(hass, tracking_number)
+
+    async def add_note(call):
+        tracking_number = str(call.data["tracking_number"]).strip().upper()
+        text = str(call.data["text"]).strip()
+        meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
+        if meta and text:
+            await meta.async_add_note(tracking_number, text)
+            _async_refresh_coordinator_listeners(hass, tracking_number)
+
+    async def delete_note(call):
+        tracking_number = str(call.data["tracking_number"]).strip().upper()
+        idx = int(call.data["idx"])
+        meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
+        if meta:
+            await meta.async_delete_note(tracking_number, idx)
             _async_refresh_coordinator_listeners(hass, tracking_number)
 
     async def set_icon(call):
@@ -282,6 +299,20 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, "clear_note", clear_note,
         schema=vol.Schema({vol.Required("tracking_number"): cv.string}),
+    )
+    hass.services.async_register(
+        DOMAIN, "add_note", add_note,
+        schema=vol.Schema({
+            vol.Required("tracking_number"): cv.string,
+            vol.Required("text"): vol.All(cv.string, vol.Length(max=_NOTE_MAX_LEN)),
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN, "delete_note", delete_note,
+        schema=vol.Schema({
+            vol.Required("tracking_number"): cv.string,
+            vol.Required("idx"): vol.Coerce(int),
+        }),
     )
     hass.services.async_register(
         DOMAIN, "set_icon", set_icon,

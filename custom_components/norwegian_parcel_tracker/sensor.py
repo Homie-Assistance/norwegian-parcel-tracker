@@ -108,6 +108,8 @@ class ParcelStatusSensor(BaseParcelSensor):
             meta = meta_store.get(self.coordinator.tracking_number)
             if meta.get("note"):
                 attrs["note"] = meta["note"]
+            if meta.get("notes"):
+                attrs["notes"] = meta["notes"]
             if meta.get("npt_icon"):
                 attrs["npt_icon"] = meta["npt_icon"]
             if meta.get("display_name"):

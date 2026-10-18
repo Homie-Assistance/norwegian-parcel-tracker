@@ -294,6 +294,30 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     });
   }
 
+  _showAddNoteDialog(tn) {
+    const overlay = this._showModal(`
+      <div class="npt-dialog">
+        <h3>${this._isNo ? "📝 Legg til notat" : "📝 Add note"}</h3>
+        <span class="npt-label">${this._t("Note — shown in cards and panel instead of status")}</span>
+        <textarea class="npt-input" id="npt-note-inp" maxlength="2000" placeholder="${this._isNo ? "Skriv notat…" : "Write note…"}"></textarea>
+        <div class="npt-actions">
+          <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
+          <button class="npt-btn npt-btn-primary" id="npt-save">${this._t("Save")}</button>
+        </div>
+      </div>`);
+    const ta = overlay.querySelector("#npt-note-inp");
+    ta.focus();
+    overlay.querySelector("#npt-cancel").addEventListener("click", () => this._closeModal());
+    overlay.querySelector("#npt-save").addEventListener("click", () => {
+      const text = ta.value.trim();
+      if (text) this._callService("norwegian_parcel_tracker", "add_note", { tracking_number: tn, text });
+      this._closeModal();
+    });
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") this._closeModal();
+    });
+  }
+
   _showIconDialog(tn, current) {
     let activeTab = "mdi";
     if (current && (current.startsWith("http://") || current.startsWith("https://"))) activeTab = "url";
@@ -380,7 +404,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _renderDetailPane(state) {
     const a = state.attributes;
     const events = a.recent_events || [];
-    const note = a.note || "";
+    const notes = a.notes || (a.note ? [{ text: a.note, ts: "", idx: 0 }] : []);
     const phone = this._carrierPhone(a.carrier);
     const trackingNum = a.tracking_number || state.entity_id;
     const carrierLinks = this._carrierLinks(a.carrier, trackingNum);
@@ -405,18 +429,36 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       })
       .join("");
 
+    const notesHtml = notes.length === 0
+      ? `<div class="notes-empty">${this._isNo ? "Ingen notater ennå" : "No notes yet"}</div>`
+      : notes.map((n) => {
+          const tsDisplay = n.ts && n.ts !== "migrated"
+            ? n.ts.slice(0, 16).replace("T", " ")
+            : "";
+          return `<div class="note-entry" data-idx="${n.idx}">
+            ${tsDisplay ? `<div class="note-meta">${this._escHtml(tsDisplay)}</div>` : ""}
+            <div class="note-text">${this._escHtml(n.text)}</div>
+            <button class="note-delete" data-idx="${n.idx}" title="${this._isNo ? "Slett notat" : "Delete note"}">🗑</button>
+          </div>`;
+        }).join("");
+
     return `
       <div class="detail-pane">
         <h2>${this._escHtml(a.display_name || a.sender_name || trackingNum)}</h2>
         <div class="detail-tracking">${this._escHtml(trackingNum)}</div>
 
-        ${note ? `<div class="note-box"><span class="note-label">📝 ${this._isNo ? "Notat" : "Note"}</span><div class="note-text">${this._escHtml(note)}</div><button class="btn-sm" id="btn-clear-note">${this._t("Clear note")}</button></div>` : ""}
-
         <div class="detail-actions">
           <button class="btn" id="btn-rename">${this._t("✏️ Rename")}</button>
-          <button class="btn" id="btn-note">${note ? this._t("📝 Edit note") : this._t("📝 Add note")}</button>
-          <button class="btn" id="btn-icon">${this._t("🎨 Set icon")}</button>
+          <button class="btn btn-icon" id="btn-icon">${this._t("🎨 Set icon")}</button>
           <button class="btn btn-refresh" id="btn-refresh">${this._t("↺ Refresh")}</button>
+        </div>
+
+        <div class="notes-section">
+          <div class="notes-header">
+            <span>📝 ${this._isNo ? "Notater" : "Notes"}</span>
+            <button class="btn btn-note" id="btn-add-note">${this._isNo ? "+ Legg til notat" : "+ Add note"}</button>
+          </div>
+          ${notesHtml}
         </div>
 
         <div class="carrier-links">
@@ -446,14 +488,14 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       : "";
     return `
       <div style="font-size:0.78em;opacity:0.55;padding:0 0 6px">${this._t("All parcel routes — click a dot to view details & route")}</div>
-      <div id="npt-overview-map" class="leaflet-map-overview"></div>
+      <div class="map-frame-overview"><div id="npt-overview-map" class="leaflet-map-overview"></div></div>
       ${noDataHtml}`;
   }
 
   _renderRouteMap(state) {
     const coords = (state && state.attributes && state.attributes.route_coords) || [];
     if (coords.length === 0) return `<div class="map-empty">${this._t("No route data")}</div>`;
-    return `<div id="npt-route-map" class="leaflet-map-route"></div>`;
+    return `<div class="map-frame"><div id="npt-route-map" class="leaflet-map-route"></div></div>`;
   }
 
   _render() {
@@ -515,8 +557,14 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .col-loc-time { font-size: 0.85em; opacity: 0.5; display: block; }
         .col-note { font-size: 0.78em; color: #ffd740; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
         .col-note:hover { text-decoration: underline; }
-        .leaflet-map-route { height: 280px; width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 12px; border: 1px solid var(--divider-color, #333); }
-        .leaflet-map-overview { height: calc(100vh - 160px); min-height: 300px; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--divider-color, #333); }
+        .map-frame { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; margin-bottom: 12px; background: #c8a96e; position: relative; }
+        .map-frame-overview { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; background: #c8a96e; }
+        .leaflet-map-route { height: 280px; width: 100%; display: block; filter: sepia(0.75) contrast(0.9) brightness(1.08) saturate(0.45) hue-rotate(8deg); }
+        .leaflet-map-overview { height: calc(100vh - 160px); min-height: 300px; width: 100%; display: block; filter: sepia(0.75) contrast(0.9) brightness(1.08) saturate(0.45) hue-rotate(8deg); }
+        .leaflet-container { background: #c8a96e !important; }
+        .leaflet-tile-pane { z-index: 2 !important; }
+        .leaflet-overlay-pane { z-index: 4 !important; }
+        .leaflet-marker-pane { z-index: 6 !important; }
         .map-empty { padding: 20px; opacity: 0.5; text-align: center; }
         .detail-pane { max-width: 720px; }
         .detail-pane h2 { margin: 0 0 4px; font-size: 1.1em; }
@@ -531,9 +579,22 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .note-label { font-weight: 600; font-size: 0.85em; display: block; margin-bottom: 4px; opacity: 0.75; }
         .note-text { white-space: pre-wrap; word-break: break-word; font-size: 0.95em; line-height: 1.5; }
         .detail-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
-        .btn { background: var(--primary-color, #1976d2); color: #fff; border: none; border-radius: 4px; padding: 7px 13px; cursor: pointer; font-size: 0.85em; font-family: inherit; }
-        .btn:hover { filter: brightness(1.1); }
-        .btn-sm { background: transparent; border: 1px solid rgba(255,193,7,0.5); color: var(--primary-text-color, #eee); border-radius: 4px; padding: 3px 8px; cursor: pointer; font-size: 0.75em; margin-top: 8px; font-family: inherit; }
+        .btn { background: transparent; border: 1px solid var(--divider-color, #444); color: var(--primary-text-color, #eee); border-radius: 6px; padding: 6px 13px; cursor: pointer; font-size: 0.83em; font-family: inherit; transition: background 0.15s, border-color 0.15s; }
+        .btn:hover { background: rgba(255,255,255,0.06); }
+        .btn-note { border-color: rgba(255,215,64,0.45); color: #ffd740; }
+        .btn-note:hover { background: rgba(255,215,64,0.09); }
+        .btn-icon { border-color: rgba(179,136,255,0.45); color: #b388ff; }
+        .btn-icon:hover { background: rgba(179,136,255,0.09); }
+        .btn-refresh { border-color: rgba(100,221,23,0.35); color: #76ff03; }
+        .btn-refresh:hover { background: rgba(100,221,23,0.08); }
+        .notes-section { margin: 14px 0 10px; }
+        .notes-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 0.85em; font-weight: 600; opacity: 0.8; }
+        .note-entry { background: var(--secondary-background-color, #1e1e1e); border-left: 3px solid #ffd740; border-radius: 0 6px 6px 0; padding: 8px 36px 8px 12px; margin-bottom: 6px; position: relative; }
+        .note-meta { font-size: 0.72em; opacity: 0.5; margin-bottom: 3px; }
+        .note-text { white-space: pre-wrap; word-break: break-word; font-size: 0.92em; line-height: 1.5; }
+        .note-delete { position: absolute; top: 6px; right: 8px; background: transparent; border: none; color: var(--error-color, #cf6679); cursor: pointer; opacity: 0.6; font-size: 0.85em; padding: 2px 4px; }
+        .note-delete:hover { opacity: 1; }
+        .notes-empty { font-size: 0.82em; opacity: 0.4; padding: 6px 0; }
         .carrier-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
         .carrier-link { color: var(--primary-color, #42a5f5); text-decoration: none; font-size: 0.88em; padding: 4px 10px; border: 1px solid rgba(66,165,245,0.3); border-radius: 4px; }
         .carrier-link:hover { background: rgba(66,165,245,0.1); text-decoration: none; }
@@ -596,17 +657,22 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       this._shadow.getElementById("btn-rename")?.addEventListener("click", () =>
         this._showRenameDialog(tn, selected.attributes.display_name || selected.attributes.sender_name || ""));
 
-      this._shadow.getElementById("btn-note")?.addEventListener("click", () =>
-        this._showNoteDialog(tn, selected.attributes.note || ""));
-
-      this._shadow.getElementById("btn-clear-note")?.addEventListener("click", () =>
-        this._callService("norwegian_parcel_tracker", "clear_note", { tracking_number: tn }));
+      this._shadow.getElementById("btn-add-note")?.addEventListener("click", () =>
+        this._showAddNoteDialog(tn));
 
       this._shadow.getElementById("btn-icon")?.addEventListener("click", () =>
         this._showIconDialog(tn, selected.attributes.npt_icon || ""));
 
       this._shadow.getElementById("btn-refresh")?.addEventListener("click", () =>
         this._callService("norwegian_parcel_tracker", "refresh", { tracking_number: tn }));
+
+      this._shadow.querySelectorAll(".note-delete").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.dataset.idx, 10);
+          this._callService("norwegian_parcel_tracker", "delete_note", { tracking_number: tn, idx });
+        });
+      });
     }
 
     this._initLeafletMaps().catch(() => {});
@@ -635,9 +701,14 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       st.id = "npt-map-icon-styles";
       st.textContent = [
         ".npt-plane-wrap{background:none!important;border:none!important;box-shadow:none!important;}",
-        ".npt-plane{font-size:22px;line-height:1;display:block;animation:npt-glow 2s ease-in-out infinite;}",
-        "@keyframes npt-glow{0%,100%{filter:drop-shadow(0 0 3px rgba(66,165,245,.4))}50%{filter:drop-shadow(0 0 10px rgba(66,165,245,.9))}}",
-        ".npt-stop-label{background:rgba(0,0,0,.55);color:#fff;padding:2px 5px;border-radius:3px;font-size:11px;white-space:nowrap;}",
+        ".npt-plane{font-size:22px;line-height:1;display:block;animation:npt-glow 2.5s ease-in-out infinite;}",
+        "@keyframes npt-glow{0%,100%{filter:drop-shadow(0 0 3px rgba(200,169,110,.5))}50%{filter:drop-shadow(0 0 10px rgba(200,169,110,1))}}",
+        ".npt-stop-label{background:rgba(74,40,0,.7);color:#f5e6c8;padding:2px 5px;border-radius:3px;font-size:11px;white-space:nowrap;}",
+        ".leaflet-popup-content-wrapper{background:#f5e6c8!important;color:#3b1f00!important;border:1px solid #5c3a1e!important;border-radius:4px!important;box-shadow:0 2px 10px rgba(0,0,0,.4)!important;}",
+        ".leaflet-popup-tip{background:#f5e6c8!important;}",
+        ".leaflet-popup-content{color:#3b1f00!important;font-size:12px!important;}",
+        ".leaflet-tooltip{background:#f5e6c8!important;border:1px solid #5c3a1e!important;color:#3b1f00!important;border-radius:3px!important;font-size:11px!important;}",
+        ".leaflet-tooltip::before{border-top-color:#5c3a1e!important;}",
       ].join("");
       document.head.appendChild(st);
     }
@@ -667,11 +738,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24] });
     this._leafletMap = map;
 
-    L.polyline(latLngs, { color: "#42a5f5", weight: 3.5, opacity: 0.8, dashArray: "6 4" }).addTo(map);
+    L.polyline(latLngs, { color: "#4a2800", weight: 3, opacity: 0.85, dashArray: "8 5" }).addTo(map);
 
     ordered.slice(0, -1).forEach((c) => {
       const tip = `${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`;
-      L.circleMarker([c.lat, c.lng], { radius: 5, color: "#42a5f5", fillColor: "#42a5f5", fillOpacity: 0.5, weight: 1.5 })
+      L.circleMarker([c.lat, c.lng], { radius: 5, color: "#4a2800", fillColor: "#7a4800", fillOpacity: 0.6, weight: 1.5 })
         .bindTooltip(tip).addTo(map);
     });
 
@@ -698,7 +769,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   async _initOverviewMap(parcels) {
     const mapDiv = this._shadow.getElementById("npt-overview-map");
     if (!mapDiv) return;
-    const COLORS = ["#42a5f5","#ef5350","#66bb6a","#ffa726","#ab47bc","#26c6da","#ec407a","#8d6e63"];
+    const COLORS = ["#4a2800","#7a2800","#2a4800","#6a4800","#4a006a","#006a4a","#6a006a","#8d6e63"];
     const parcelRoutes = parcels
       .filter((s) => s.attributes.route_coords && s.attributes.route_coords.length > 0)
       .map((s, i) => ({
@@ -722,10 +793,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     parcelRoutes.forEach((p) => {
       const ordered = [...p.coords].reverse();
       const latLngs = ordered.map((c) => [c.lat, c.lng]);
-      L.polyline(latLngs, { color: p.color, weight: 2.5, opacity: 0.7 }).addTo(map);
+      L.polyline(latLngs, { color: p.color, weight: 2.5, opacity: 0.85, dashArray: "8 5" }).addTo(map);
 
       ordered.slice(0, -1).forEach((c) => {
-        L.circleMarker([c.lat, c.lng], { radius: 4, color: p.color, fillColor: p.color, fillOpacity: 0.4, weight: 1 })
+        L.circleMarker([c.lat, c.lng], { radius: 4, color: p.color, fillColor: p.color, fillOpacity: 0.5, weight: 1 })
           .bindTooltip(`${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`)
           .addTo(map);
       });

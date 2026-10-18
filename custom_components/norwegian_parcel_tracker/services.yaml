@@ -49,6 +49,30 @@ clear_note:
       selector:
         text:
 
+add_note:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+    text:
+      required: true
+      selector:
+        text:
+          multiline: true
+
+delete_note:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+    idx:
+      required: true
+      selector:
+        number:
+          min: 0
+
 set_icon:
   fields:
     tracking_number:

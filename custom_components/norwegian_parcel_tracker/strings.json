@@ -256,11 +256,39 @@
     },
     "clear_note": {
       "name": "Clear note",
-      "description": "Removes a previously set note from a parcel, resuming display of live tracking data.",
+      "description": "Removes all notes from a parcel, resuming display of live tracking data.",
       "fields": {
         "tracking_number": {
           "name": "Tracking number",
           "description": "Tracking number of the parcel."
+        }
+      }
+    },
+    "add_note": {
+      "name": "Add note",
+      "description": "Appends a timestamped note to a parcel's note log.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel."
+        },
+        "text": {
+          "name": "Note text",
+          "description": "Text of the note to add. Maximum 2000 characters."
+        }
+      }
+    },
+    "delete_note": {
+      "name": "Delete note",
+      "description": "Removes a specific note from a parcel's note log by its index.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the parcel."
+        },
+        "idx": {
+          "name": "Note index",
+          "description": "Index (idx field) of the note to delete, as returned in the notes attribute."
         }
       }
     },
