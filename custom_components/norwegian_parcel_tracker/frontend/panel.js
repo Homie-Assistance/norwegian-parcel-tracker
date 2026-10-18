@@ -47,10 +47,21 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     return null;
   }
 
-  _delaySearchUrl(carrier) {
+  _carrierLinks(carrier, trackingNumber) {
     const c = String(carrier || "").toLowerCase();
-    if (c === "helthjem") return "https://duckduckgo.com/?q=helthjem+forsinkelse";
-    return "https://duckduckgo.com/?q=posten+forsinkelse";
+    const tn = encodeURIComponent(trackingNumber || "");
+    if (c === "helthjem") return {
+      tracking: `https://www.helthjem.no/sporing/${tn}`,
+      trackingLabel: "Track on Helthjem",
+      status: "https://www.helthjem.no/kundeservice/",
+      statusLabel: "Helthjem customer service",
+    };
+    return {
+      tracking: `https://sporing.posten.no/tracking/${tn}`,
+      trackingLabel: "Track on Posten",
+      status: "https://www.posten.no/motta/sporing/",
+      statusLabel: "Posten tracking info",
+    };
   }
 
   _selectParcel(entityId) {
@@ -270,8 +281,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const events = a.recent_events || [];
     const note = a.note || "";
     const phone = this._carrierPhone(a.carrier);
-    const delayUrl = this._delaySearchUrl(a.carrier);
     const trackingNum = a.tracking_number || state.entity_id;
+    const carrierLinks = this._carrierLinks(a.carrier, trackingNum);
 
     const eventsHtml = events
       .slice(0, 20)
@@ -299,8 +310,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           <button class="btn btn-refresh" id="btn-refresh">↺ Refresh</button>
         </div>
 
-        ${phone ? `<div class="carrier-contact"><a href="tel:${this._escHtml(phone.num)}" class="phone-link">📞 ${this._escHtml(phone.label)}</a></div>` : ""}
-        <div class="carrier-contact"><a href="${this._escHtml(delayUrl)}" target="_blank" rel="noopener noreferrer" class="news-link">🔍 Search for delivery delays</a></div>
+        <div class="carrier-links">
+          <a href="${this._escHtml(carrierLinks.tracking)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🔗 ${this._escHtml(carrierLinks.trackingLabel)}</a>
+          <a href="${this._escHtml(carrierLinks.status)}" target="_blank" rel="noopener noreferrer" class="carrier-link">📋 ${this._escHtml(carrierLinks.statusLabel)}</a>
+          ${phone ? `<a href="tel:${this._escHtml(phone.num)}" class="carrier-link">📞 ${this._escHtml(phone.label)}</a>` : ""}
+        </div>
 
         <h3>Event history</h3>
         <div class="events-list">${eventsHtml || "<p>No events</p>"}</div>
@@ -498,9 +512,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .btn { background: var(--primary-color, #1976d2); color: #fff; border: none; border-radius: 4px; padding: 7px 13px; cursor: pointer; font-size: 0.85em; font-family: inherit; }
         .btn:hover { filter: brightness(1.1); }
         .btn-sm { background: transparent; border: 1px solid rgba(255,193,7,0.5); color: var(--primary-text-color, #eee); border-radius: 4px; padding: 3px 8px; cursor: pointer; font-size: 0.75em; margin-top: 8px; font-family: inherit; }
-        .carrier-contact { margin: 6px 0; }
-        .phone-link, .news-link { color: var(--primary-color, #42a5f5); text-decoration: none; font-size: 0.9em; }
-        .phone-link:hover, .news-link:hover { text-decoration: underline; }
+        .carrier-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+        .carrier-link { color: var(--primary-color, #42a5f5); text-decoration: none; font-size: 0.88em; padding: 4px 10px; border: 1px solid rgba(66,165,245,0.3); border-radius: 4px; }
+        .carrier-link:hover { background: rgba(66,165,245,0.1); text-decoration: none; }
         .events-list { font-size: 0.92em; }
         .event-row { display: grid; grid-template-columns: 140px 1fr 120px; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--divider-color, #222); line-height: 1.4; }
         .event-date { opacity: 0.6; }
