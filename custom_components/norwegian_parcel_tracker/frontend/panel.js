@@ -1,5 +1,38 @@
-// Norwegian Parcel Tracker — Dashboard Panel
-// Registered as a HA sidebar panel (module_url). Full implementation: v2.0.
+// Norwegian Parcel Tracker — Dashboard Panel v2.1
+
+const _NO = {
+  "No parcels tracked.": "Ingen pakker spores.",
+  "Add one via the integration.": "Legg til via integrasjonen.",
+  "No route data": "Ingen rutedata",
+  "No location data yet": "Ingen posisjonsdata ennå",
+  "parcel positions will appear here as events are tracked.": "pakkenes posisjoner vil vises her etter hvert som de spores.",
+  "All parcel routes — click a dot to view details & route": "Alle pakkeruter — klikk på en prikk for detaljer og rute",
+  "No location data yet:": "Ingen posisjonsdata ennå:",
+  "Event history": "Hendelseslogg",
+  "No events": "Ingen hendelser",
+  "✏️ Rename": "✏️ Gi nytt navn",
+  "📝 Edit note": "📝 Rediger notat",
+  "📝 Add note": "📝 Legg til notat",
+  "🎨 Set icon": "🎨 Velg ikon",
+  "↺ Refresh": "↺ Oppdater",
+  "Clear note": "Slett notat",
+  "✏️ Rename parcel": "✏️ Gi pakken nytt navn",
+  "Display name": "Visningsnavn",
+  "Save": "Lagre",
+  "Cancel": "Avbryt",
+  "📝 Add note": "📝 Legg til notat",
+  "📝 Edit note": "📝 Rediger notat",
+  "Note — shown in cards and panel instead of status": "Notat — vises i kort og panel i stedet for status",
+  "Clear icon": "Fjern ikon",
+  "🎨 Set icon": "🎨 Velg ikon",
+  "MDI icon": "MDI-ikon",
+  "Image URL": "Bilde-URL",
+  "Type the icon name (e.g. mdi:gift, mdi:truck-fast) and click Browse to search.": "Skriv inn ikonnavnet (f.eks. mdi:gift, mdi:truck-fast) og klikk Søk.",
+  "Browse ↗": "Søk ↗",
+  "Emoji": "Emoji",
+  "📦 Note": "📦 Notat",
+  "📝 Note": "📝 Notat",
+};
 
 class NorwegianParcelTrackerPanel extends HTMLElement {
   constructor() {
@@ -8,7 +41,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._parcels = [];
     this._selected = null;
     this._shadow = this.attachShadow({ mode: "open" });
+    const lang = (navigator.language || "").toLowerCase();
+    this._isNo = lang.startsWith("nb") || lang.startsWith("no") || lang.startsWith("nn");
   }
+
+  _t(k) { return (this._isNo && _NO[k]) ? _NO[k] : k; }
 
   set hass(hass) {
     this._hass = hass;
@@ -66,22 +103,60 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     return { tracking: null, trackingLabel: null };
   }
 
+  _searchEngine() {
+    try { return localStorage.getItem("npt-search-engine") || "google"; } catch { return "google"; }
+  }
+
   _disruptionSearchUrl(routeCoords) {
-    // Build a news search for real disruptions at the parcel's recent locations:
-    // airport/port strikes, weather, geopolitical events, etc.
     const recent = (routeCoords || []).slice(0, 6);
     const places = [...new Set(
       recent
         .map((c) => (c.location || "").split(",")[0].trim())
         .filter((l) => l.length > 2)
     )].slice(0, 3);
-
     const locationPart = places.join(" ");
     const terms = locationPart
-      ? `${locationPart} disruption delay strike airport port closed`
-      : "shipping disruption delay strike";
+      ? `${locationPart} forsinkelse streik havn flyplass stengt`
+      : "frakt forsinkelse streik";
+    const q = encodeURIComponent(terms);
+    const ENGINE = {
+      google: `https://www.google.com/search?q=${q}&tbm=nws`,
+      bing:   `https://www.bing.com/news/search?q=${q}`,
+      ddg:    `https://duckduckgo.com/?q=${q}&ia=news`,
+      brave:  `https://search.brave.com/news?q=${q}`,
+    };
+    return ENGINE[this._searchEngine()] || ENGINE.google;
+  }
 
-    return `https://duckduckgo.com/?q=${encodeURIComponent(terms)}&ia=news`;
+  _showSettingsDialog() {
+    const cur = this._searchEngine();
+    const opts = [
+      { key: "google", label: "Google Nyheter" },
+      { key: "bing",   label: "Bing Nyheter" },
+      { key: "ddg",    label: "DuckDuckGo" },
+      { key: "brave",  label: "Brave" },
+    ];
+    const radios = opts.map((o) => `
+      <label style="display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer">
+        <input type="radio" name="npt-engine" value="${o.key}" ${o.key === cur ? "checked" : ""} style="accent-color:var(--primary-color,#1976d2)">
+        ${o.label}
+      </label>`).join("");
+    const overlay = this._showModal(`
+      <div class="npt-dialog">
+        <h3>⚙️ Innstillinger</h3>
+        <span class="npt-label">Søkemotor for forstyrrelser</span>
+        ${radios}
+        <div class="npt-actions">
+          <button class="npt-btn npt-btn-secondary" id="npt-cancel">Avbryt</button>
+          <button class="npt-btn npt-btn-primary" id="npt-settings-save">Lagre</button>
+        </div>
+      </div>`);
+    overlay.querySelector("#npt-cancel").addEventListener("click", () => this._closeModal());
+    overlay.querySelector("#npt-settings-save").addEventListener("click", () => {
+      const chosen = overlay.querySelector("input[name='npt-engine']:checked");
+      if (chosen) { try { localStorage.setItem("npt-search-engine", chosen.value); } catch {} }
+      this._closeModal();
+    });
   }
 
   _selectParcel(entityId) {
@@ -164,12 +239,12 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _showRenameDialog(tn, current) {
     const overlay = this._showModal(`
       <div class="npt-dialog">
-        <h3>✏️ Rename parcel</h3>
-        <span class="npt-label">Display name</span>
+        <h3>${this._t("✏️ Rename parcel")}</h3>
+        <span class="npt-label">${this._t("Display name")}</span>
         <input class="npt-input" id="npt-rename-inp" type="text" value="${this._escHtml(current)}" maxlength="100">
         <div class="npt-actions">
-          <button class="npt-btn npt-btn-secondary" id="npt-cancel">Cancel</button>
-          <button class="npt-btn npt-btn-primary" id="npt-save">Save</button>
+          <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
+          <button class="npt-btn npt-btn-primary" id="npt-save">${this._t("Save")}</button>
         </div>
       </div>`);
     const inp = overlay.querySelector("#npt-rename-inp");
@@ -188,13 +263,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _showNoteDialog(tn, current) {
     const overlay = this._showModal(`
       <div class="npt-dialog">
-        <h3>📝 ${current ? "Edit note" : "Add note"}</h3>
-        <span class="npt-label">Note — shown in cards and panel instead of status</span>
+        <h3>${current ? this._t("📝 Edit note") : this._t("📝 Add note")}</h3>
+        <span class="npt-label">${this._t("Note — shown in cards and panel instead of status")}</span>
         <textarea class="npt-input" id="npt-note-inp" maxlength="2000">${this._escHtml(current)}</textarea>
         <div class="npt-actions">
-          ${current ? `<button class="npt-btn npt-btn-danger" id="npt-clear-note">Clear note</button>` : ""}
-          <button class="npt-btn npt-btn-secondary" id="npt-cancel">Cancel</button>
-          <button class="npt-btn npt-btn-primary" id="npt-save">Save</button>
+          ${current ? `<button class="npt-btn npt-btn-danger" id="npt-clear-note">${this._t("Clear note")}</button>` : ""}
+          <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
+          <button class="npt-btn npt-btn-primary" id="npt-save">${this._t("Save")}</button>
         </div>
       </div>`);
     const ta = overlay.querySelector("#npt-note-inp");
@@ -227,37 +302,37 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     const overlay = this._showModal(`
       <div class="npt-dialog">
-        <h3>🎨 Set icon</h3>
+        <h3>${this._t("🎨 Set icon")}</h3>
         <div class="icon-tabs">
-          <button class="icon-tab${activeTab === "mdi" ? " active" : ""}" data-tab="mdi">MDI icon</button>
-          <button class="icon-tab${activeTab === "url" ? " active" : ""}" data-tab="url">Image URL</button>
-          <button class="icon-tab${activeTab === "emoji" ? " active" : ""}" data-tab="emoji">Emoji</button>
+          <button class="icon-tab${activeTab === "mdi" ? " active" : ""}" data-tab="mdi">${this._t("MDI icon")}</button>
+          <button class="icon-tab${activeTab === "url" ? " active" : ""}" data-tab="url">${this._t("Image URL")}</button>
+          <button class="icon-tab${activeTab === "emoji" ? " active" : ""}" data-tab="emoji">${this._t("Emoji")}</button>
         </div>
 
         <div class="icon-panel${activeTab === "mdi" ? " visible" : ""}" id="tab-mdi">
-          <span class="npt-label">MDI icon name</span>
+          <span class="npt-label">MDI icon</span>
           <div class="npt-row">
             <input class="npt-input" id="mdi-inp" type="text" placeholder="mdi:package-variant-closed" value="${mdiVal}">
-            <a class="npt-btn-browse" href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener">Browse ↗</a>
+            <a class="npt-btn-browse" href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener">${this._t("Browse ↗")}</a>
           </div>
-          <span class="npt-label" style="opacity:0.45">Type the icon name (e.g. mdi:gift, mdi:truck-fast) and click Browse to search.</span>
+          <span class="npt-label" style="opacity:0.45">${this._t("Type the icon name (e.g. mdi:gift, mdi:truck-fast) and click Browse to search.")}</span>
         </div>
 
         <div class="icon-panel${activeTab === "url" ? " visible" : ""}" id="tab-url">
-          <span class="npt-label">Image URL (https://)</span>
+          <span class="npt-label">${this._t("Image URL")} (https://)</span>
           <input class="npt-input" id="url-inp" type="url" placeholder="https://example.com/icon.png" value="${urlVal}">
         </div>
 
         <div class="icon-panel${activeTab === "emoji" ? " visible" : ""}" id="tab-emoji">
-          <span class="npt-label">Emoji</span>
+          <span class="npt-label">${this._t("Emoji")}</span>
           <input class="npt-input" id="emoji-inp" type="text" placeholder="📦" maxlength="10" value="${emojiVal}" style="font-size:1.4em">
           <div class="emoji-grid">${emojiGrid}</div>
         </div>
 
         <div class="npt-actions">
-          ${current ? `<button class="npt-btn npt-btn-danger" id="npt-clear-icon">Clear icon</button>` : ""}
-          <button class="npt-btn npt-btn-secondary" id="npt-cancel">Cancel</button>
-          <button class="npt-btn npt-btn-primary" id="npt-save-icon">Save</button>
+          ${current ? `<button class="npt-btn npt-btn-danger" id="npt-clear-icon">${this._t("Clear icon")}</button>` : ""}
+          <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
+          <button class="npt-btn npt-btn-primary" id="npt-save-icon">${this._t("Save")}</button>
         </div>
       </div>`);
 
@@ -326,13 +401,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         <h2>${this._escHtml(a.display_name || a.sender_name || trackingNum)}</h2>
         <div class="detail-tracking">${this._escHtml(trackingNum)}</div>
 
-        ${note ? `<div class="note-box"><span class="note-label">📝 Note</span><div class="note-text">${this._escHtml(note)}</div><button class="btn-sm" id="btn-clear-note">Clear note</button></div>` : ""}
+        ${note ? `<div class="note-box"><span class="note-label">📝 ${this._isNo ? "Notat" : "Note"}</span><div class="note-text">${this._escHtml(note)}</div><button class="btn-sm" id="btn-clear-note">${this._t("Clear note")}</button></div>` : ""}
 
         <div class="detail-actions">
-          <button class="btn" id="btn-rename">✏️ Rename</button>
-          <button class="btn" id="btn-note">📝 ${note ? "Edit note" : "Add note"}</button>
-          <button class="btn" id="btn-icon">🎨 Set icon</button>
-          <button class="btn btn-refresh" id="btn-refresh">↺ Refresh</button>
+          <button class="btn" id="btn-rename">${this._t("✏️ Rename")}</button>
+          <button class="btn" id="btn-note">${note ? this._t("📝 Edit note") : this._t("📝 Add note")}</button>
+          <button class="btn" id="btn-icon">${this._t("🎨 Set icon")}</button>
+          <button class="btn btn-refresh" id="btn-refresh">${this._t("↺ Refresh")}</button>
         </div>
 
         <div class="carrier-links">
@@ -341,8 +416,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           ${phone ? `<a href="tel:${this._escHtml(phone.num)}" class="carrier-link">📞 ${this._escHtml(phone.label)}</a>` : ""}
         </div>
 
-        <h3>Event history</h3>
-        <div class="events-list">${eventsHtml || "<p>No events</p>"}</div>
+        <h3>${this._t("Event history")}</h3>
+        <div class="events-list">${eventsHtml || `<p>${this._t("No events")}</p>`}</div>
       </div>`;
   }
 
@@ -366,7 +441,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     );
 
     if (parcelRoutes.length === 0) {
-      return `<div class="map-empty" style="padding-top:40px">No location data yet — parcel positions will appear here as events are tracked.</div>`;
+      const msg = this._isNo
+        ? "Ingen posisjonsdata ennå — pakkeposisjonene vises her etter hvert som de spores."
+        : "No location data yet — parcel positions will appear here as events are tracked.";
+      return `<div class="map-empty" style="padding-top:40px">${msg}</div>`;
     }
 
     const allCoords = parcelRoutes.flatMap((p) => p.coords);
@@ -427,7 +505,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       : "";
 
     return `
-      <div style="font-size:0.78em;opacity:0.55;padding:0 0 6px">All parcel routes — click a dot to view details &amp; route</div>
+      <div style="font-size:0.78em;opacity:0.55;padding:0 0 6px">${this._t("All parcel routes — click a dot to view details & route")}</div>
       <svg class="route-svg overview-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
         <defs>${defs}</defs>
         ${routeSvg}
@@ -437,7 +515,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   _renderRouteMap(state) {
     const coords = (state && state.attributes && state.attributes.route_coords) || [];
-    if (coords.length === 0) return `<div class="map-empty">No route data</div>`;
+    if (coords.length === 0) return `<div class="map-empty">${this._t("No route data")}</div>`;
 
     const lats = coords.map((c) => c.lat);
     const lngs = coords.map((c) => c.lng);
@@ -496,6 +574,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         :host { display: flex; flex-direction: column; height: 100%; background: var(--primary-background-color, #111); color: var(--primary-text-color, #eee); font-family: var(--paper-font-body1_-_font-family, sans-serif); }
         .panel-header { display: flex; align-items: center; padding: 12px 16px; background: var(--app-header-background-color, #1976d2); color: var(--app-header-text-color, #fff); font-size: 1.2em; font-weight: 600; }
         .panel-header ha-icon { margin-right: 8px; }
+        .panel-header-title { flex: 1; }
+        .btn-settings { background: transparent; border: none; color: var(--app-header-text-color,#fff); cursor: pointer; font-size: 1.1em; padding: 4px 8px; border-radius: 4px; opacity: 0.8; }
+        .btn-settings:hover { opacity: 1; background: rgba(255,255,255,0.12); }
         .panel-body { display: flex; flex: 1; overflow: hidden; }
         .left-pane { width: 380px; min-width: 260px; display: flex; flex-direction: column; border-right: 1px solid var(--divider-color, #333); overflow: hidden; }
         .right-pane { flex: 1; overflow: auto; padding: 12px; }
@@ -555,12 +636,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
       <div class="panel-header">
         <ha-icon icon="mdi:package-variant-closed"></ha-icon>
-        Parcels
+        <span class="panel-header-title">Pakker</span>
+        <button class="btn-settings" id="btn-settings" title="Innstillinger">⚙️</button>
       </div>
       <div class="panel-body">
         <div class="left-pane">
           ${parcels.length === 0
-            ? `<div class="no-parcels">No parcels tracked.<br>Add one via the integration.</div>`
+            ? `<div class="no-parcels">${this._t("No parcels tracked.")}<br>${this._t("Add one via the integration.")}</div>`
             : `<table class="parcel-table">
                 <colgroup>
                   <col style="width:36px"><col style="width:28%"><col><col style="width:115px">
@@ -579,6 +661,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           }
         </div>
       </div>`;
+
+    this._shadow.getElementById("btn-settings")?.addEventListener("click", () => this._showSettingsDialog());
 
     this._shadow.querySelectorAll(".parcel-row").forEach((row) => {
       row.addEventListener("click", () => this._selectParcel(row.dataset.id));
