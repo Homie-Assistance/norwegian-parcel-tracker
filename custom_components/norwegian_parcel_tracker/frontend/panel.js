@@ -15,6 +15,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._parcels = Object.values(hass.states).filter(
       (s) => s.attributes && s.attributes.npt_master_entity === true
     );
+    if (this._shadow.getElementById("npt-overlay")) return;
     this._render();
   }
 
@@ -50,14 +51,19 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _carrierLinks(carrier, trackingNumber) {
     const c = String(carrier || "").toLowerCase();
     const tn = encodeURIComponent(trackingNumber || "");
-    if (c === "helthjem") return {
-      tracking: `https://www.helthjem.no/sporing/${tn}`,
-      trackingLabel: "Track on Helthjem",
+    const CARRIERS = {
+      helthjem:  { url: `https://www.helthjem.no/sporing/${tn}`,          label: "Spor på Helthjem" },
+      posten:    { url: `https://sporing.posten.no/tracking/${tn}`,        label: "Spor på Posten" },
+      bring:     { url: `https://tracking.bring.com/tracking/${tn}`,       label: "Spor på Bring" },
+      postnord:  { url: `https://www.postnord.no/mottaker/sporing?shipmentId=${tn}`, label: "Spor på PostNord" },
+      dhl:       { url: `https://www.dhl.com/no-en/home/tracking.html?tracking-id=${tn}`, label: "Spor på DHL" },
+      ups:       { url: `https://www.ups.com/track?tracknum=${tn}`,        label: "Spor på UPS" },
+      fedex:     { url: `https://www.fedex.com/fedextrack/?trknbr=${tn}`,  label: "Spor på FedEx" },
     };
-    return {
-      tracking: `https://sporing.posten.no/tracking/${tn}`,
-      trackingLabel: "Track on Posten",
-    };
+    const match = Object.entries(CARRIERS).find(([key]) => c.includes(key));
+    if (match) return { tracking: match[1].url, trackingLabel: match[1].label };
+    if (c) return { tracking: null, trackingLabel: `Carrier: ${carrier}` };
+    return { tracking: null, trackingLabel: null };
   }
 
   _disruptionSearchUrl(routeCoords) {
@@ -301,14 +307,18 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     const eventsHtml = events
       .slice(0, 20)
-      .map(
-        (e) => `
+      .map((e) => {
+        const loc = (e.location || "").trim();
+        const locHtml = loc
+          ? `<a href="https://www.openstreetmap.org/search?query=${encodeURIComponent(loc)}" target="_blank" rel="noopener" class="event-loc-link">${this._escHtml(loc)}</a>`
+          : "";
+        return `
         <div class="event-row">
           <span class="event-date">${this._escHtml(e.date_iso ? e.date_iso.slice(0, 16).replace("T", " ") : "")}</span>
           <span class="event-desc">${this._escHtml(e.description)}</span>
-          <span class="event-loc">${this._escHtml(e.location || "")}</span>
-        </div>`
-      )
+          <span class="event-loc">${locHtml}</span>
+        </div>`;
+      })
       .join("");
 
     return `
@@ -326,8 +336,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         </div>
 
         <div class="carrier-links">
-          <a href="${this._escHtml(carrierLinks.tracking)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🔗 ${this._escHtml(carrierLinks.trackingLabel)}</a>
-          <a href="${this._escHtml(disruptionUrl)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🌐 Search disruptions near route</a>
+          ${carrierLinks.tracking ? `<a href="${this._escHtml(carrierLinks.tracking)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🔗 ${this._escHtml(carrierLinks.trackingLabel)}</a>` : (carrierLinks.trackingLabel ? `<span class="carrier-link-text">📦 ${this._escHtml(carrierLinks.trackingLabel)}</span>` : "")}
+          <a href="${this._escHtml(disruptionUrl)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🌐 Søk etter forstyrrelser</a>
           ${phone ? `<a href="tel:${this._escHtml(phone.num)}" class="carrier-link">📞 ${this._escHtml(phone.label)}</a>` : ""}
         </div>
 
@@ -516,12 +526,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .detail-pane h2 { margin: 0 0 4px; font-size: 1.1em; }
         .detail-tracking { font-size: 0.8em; opacity: 0.6; margin-bottom: 12px; }
         .note-box {
-          background: rgba(255, 193, 7, 0.12);
-          border: 1px solid rgba(255, 193, 7, 0.45);
-          border-radius: 6px; padding: 10px 14px; margin: 8px 0 12px;
+          background: var(--secondary-background-color, #1e1e1e);
+          border-left: 3px solid #ffd740;
+          border-radius: 0 6px 6px 0;
+          padding: 10px 14px; margin: 8px 0 12px;
           color: var(--primary-text-color, #eee);
         }
-        .note-label { font-weight: 600; font-size: 0.85em; display: block; margin-bottom: 4px; }
+        .note-label { font-weight: 600; font-size: 0.85em; display: block; margin-bottom: 4px; opacity: 0.75; }
         .note-text { white-space: pre-wrap; word-break: break-word; font-size: 0.95em; line-height: 1.5; }
         .detail-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
         .btn { background: var(--primary-color, #1976d2); color: #fff; border: none; border-radius: 4px; padding: 7px 13px; cursor: pointer; font-size: 0.85em; font-family: inherit; }
@@ -531,11 +542,15 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .carrier-link { color: var(--primary-color, #42a5f5); text-decoration: none; font-size: 0.88em; padding: 4px 10px; border: 1px solid rgba(66,165,245,0.3); border-radius: 4px; }
         .carrier-link:hover { background: rgba(66,165,245,0.1); text-decoration: none; }
         .events-list { font-size: 0.92em; }
-        .event-row { display: grid; grid-template-columns: 140px 1fr 120px; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--divider-color, #222); line-height: 1.4; }
+        .event-row { display: grid; grid-template-columns: 140px 1fr 130px; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--divider-color, #222); line-height: 1.4; }
         .event-date { opacity: 0.6; }
-        .event-loc { opacity: 0.55; text-align: right; }
+        .event-loc { text-align: right; }
+        .event-loc-link { color: var(--primary-color, #42a5f5); text-decoration: none; font-size: 0.88em; }
+        .event-loc-link:hover { text-decoration: underline; }
+        .carrier-link-text { font-size: 0.88em; opacity: 0.7; }
         .no-parcels { padding: 32px; text-align: center; opacity: 0.5; }
-        table { table-layout: fixed; }
+        table { table-layout: fixed; width: 100%; }
+        .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       </style>
 
       <div class="panel-header">
@@ -547,8 +562,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           ${parcels.length === 0
             ? `<div class="no-parcels">No parcels tracked.<br>Add one via the integration.</div>`
             : `<table class="parcel-table">
+                <colgroup>
+                  <col style="width:36px"><col style="width:28%"><col><col style="width:115px">
+                </colgroup>
                 <thead><tr>
-                  <th></th><th>Package</th><th>Status</th><th>ETA</th>
+                  <th></th><th>Pakke</th><th>Status</th><th>ETA</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
               </table>`

@@ -5,6 +5,7 @@ import re
 from os import path as ospath
 
 from homeassistant.components import panel_custom
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, SupportsResponse
@@ -150,6 +151,8 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
             static_paths.append(StaticPathConfig(url, fpath, cache_headers=False))
 
     await hass.http.async_register_static_paths(static_paths)
+    for card_url in (_CARD_URL, _COMPACT_CARD_URL, _MAP_CARD_URL):
+        add_extra_js_url(hass, f"{card_url}?v={VERSION}")
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path="norwegian-parcel-tracker",
