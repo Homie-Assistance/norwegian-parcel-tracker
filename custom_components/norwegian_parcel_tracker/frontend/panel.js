@@ -592,7 +592,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       const name = a.display_name || a.sender_name || a.tracking_number || s.entity_id;
       const status = s.state || "";
       const isActive = s.entity_id === this._selected;
-      const loc = ((a.route_coords && a.route_coords[0] && a.route_coords[0].location) || "").split(",")[0].trim();
+      const curCoord = a.route_coords && a.route_coords[0];
+      const loc = (curCoord && curCoord.location || "").split(",")[0].trim();
+      const locTime = curCoord && curCoord.date_iso ? curCoord.date_iso.slice(0, 16).replace("T", " ") : "";
       const notePreview = a.note ? a.note.slice(0, 45) + (a.note.length > 45 ? "…" : "") : "";
       const tn = a.tracking_number || s.entity_id;
       return `
@@ -600,7 +602,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           <td class="col-icon">${icon}</td>
           <td class="col-name">${this._escHtml(name)}</td>
           <td class="col-status">${this._escHtml(status)}</td>
-          <td class="col-loc">${this._escHtml(loc)}</td>
+          <td class="col-loc">${this._escHtml(loc)}${locTime ? `<br><span class="col-loc-time">${this._escHtml(locTime)}</span>` : ""}</td>
           <td class="col-eta">${this._escHtml(a.estimated_delivery_iso ? a.estimated_delivery_iso.slice(0,10) : "")}</td>
           ${notePreview ? `<td class="col-note" data-tn="${this._escHtml(tn)}" data-note="${this._escHtml(a.note || "")}">📝 ${this._escHtml(notePreview)}</td>` : "<td></td>"}
         </tr>`;
@@ -629,7 +631,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .parcel-icon-emoji { font-size: 20px; }
         .col-status { font-size: 0.85em; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .col-eta { font-size: 0.75em; opacity: 0.6; white-space: nowrap; }
-        .col-loc { font-size: 0.78em; opacity: 0.65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .col-loc { font-size: 0.78em; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+        .col-loc-time { font-size: 0.85em; opacity: 0.5; display: block; }
         .col-note { font-size: 0.78em; color: #ffd740; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
         .col-note:hover { text-decoration: underline; }
         .route-svg { width: 100%; max-height: 320px; background: var(--secondary-background-color, #181818); border-radius: 8px; border: 1px solid var(--divider-color, #333); margin-bottom: 12px; }
