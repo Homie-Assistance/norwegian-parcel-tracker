@@ -53,15 +53,29 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     if (c === "helthjem") return {
       tracking: `https://www.helthjem.no/sporing/${tn}`,
       trackingLabel: "Track on Helthjem",
-      status: "https://www.helthjem.no/kundeservice/",
-      statusLabel: "Helthjem customer service",
     };
     return {
       tracking: `https://sporing.posten.no/tracking/${tn}`,
       trackingLabel: "Track on Posten",
-      status: "https://www.posten.no/motta/sporing/",
-      statusLabel: "Posten tracking info",
     };
+  }
+
+  _disruptionSearchUrl(routeCoords) {
+    // Build a news search for real disruptions at the parcel's recent locations:
+    // airport/port strikes, weather, geopolitical events, etc.
+    const recent = (routeCoords || []).slice(0, 6);
+    const places = [...new Set(
+      recent
+        .map((c) => (c.location || "").split(",")[0].trim())
+        .filter((l) => l.length > 2)
+    )].slice(0, 3);
+
+    const locationPart = places.join(" ");
+    const terms = locationPart
+      ? `${locationPart} disruption delay strike airport port closed`
+      : "shipping disruption delay strike";
+
+    return `https://duckduckgo.com/?q=${encodeURIComponent(terms)}&ia=news`;
   }
 
   _selectParcel(entityId) {
@@ -283,6 +297,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const phone = this._carrierPhone(a.carrier);
     const trackingNum = a.tracking_number || state.entity_id;
     const carrierLinks = this._carrierLinks(a.carrier, trackingNum);
+    const disruptionUrl = this._disruptionSearchUrl(a.route_coords);
 
     const eventsHtml = events
       .slice(0, 20)
@@ -312,7 +327,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
         <div class="carrier-links">
           <a href="${this._escHtml(carrierLinks.tracking)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🔗 ${this._escHtml(carrierLinks.trackingLabel)}</a>
-          <a href="${this._escHtml(carrierLinks.status)}" target="_blank" rel="noopener noreferrer" class="carrier-link">📋 ${this._escHtml(carrierLinks.statusLabel)}</a>
+          <a href="${this._escHtml(disruptionUrl)}" target="_blank" rel="noopener noreferrer" class="carrier-link">🌐 Search disruptions near route</a>
           ${phone ? `<a href="tel:${this._escHtml(phone.num)}" class="carrier-link">📞 ${this._escHtml(phone.label)}</a>` : ""}
         </div>
 
