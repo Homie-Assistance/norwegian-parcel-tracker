@@ -64,7 +64,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   _renderDetailPane(state) {
     const a = state.attributes;
-    const events = a.events || [];
+    const events = a.recent_events || [];
     const note = a.note || "";
     const phone = this._carrierPhone(a.carrier);
     const delayUrl = this._delaySearchUrl(a.carrier);
@@ -102,6 +102,54 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         <h3>Event history</h3>
         <div class="events-list">${eventsHtml || "<p>No events</p>"}</div>
       </div>`;
+  }
+
+  _renderAllParcelsMap(parcels) {
+    const points = parcels
+      .filter((s) => s.attributes.route_coords && s.attributes.route_coords.length > 0)
+      .map((s) => ({
+        entityId: s.entity_id,
+        lat: s.attributes.route_coords[0].lat,
+        lng: s.attributes.route_coords[0].lng,
+        name: (s.attributes.display_name || s.attributes.sender_name || s.attributes.tracking_number || "").slice(0, 22),
+        icon: s.attributes.npt_icon || "",
+        delivered: /delivered|levert|hentet/i.test(s.state || ""),
+      }));
+
+    if (points.length === 0) {
+      return `<div class="map-empty" style="padding-top:40px">No location data yet — parcel positions will appear here as events are tracked.</div>`;
+    }
+
+    const lats = points.map((p) => p.lat);
+    const lngs = points.map((p) => p.lng);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const dLat = (maxLat - minLat) || 0.05;
+    const dLng = (maxLng - minLng) || 0.05;
+    const pad = 0.18;
+    const vMinLat = minLat - dLat * pad, vMaxLat = maxLat + dLat * pad;
+    const vMinLng = minLng - dLng * pad, vMaxLng = maxLng + dLng * pad;
+
+    const W = 600, H = 300;
+    const toX = (lng) => ((lng - vMinLng) / (vMaxLng - vMinLng)) * W;
+    const toY = (lat) => H - ((lat - vMinLat) / (vMaxLat - vMinLat)) * H;
+
+    const dots = points.map((p) => {
+      const x = toX(p.lng), y = toY(p.lat);
+      const isEmoji = p.icon && !p.icon.startsWith("mdi:") && !p.icon.startsWith("http");
+      const label = isEmoji ? p.icon : "📦";
+      const cls = p.delivered ? "overview-dot-delivered" : "overview-dot";
+      return `<g class="overview-parcel" data-id="${this._escHtml(p.entityId)}" style="cursor:pointer" tabindex="0">
+        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="13" class="${cls}"/>
+        <text x="${x.toFixed(1)}" y="${(y + 5).toFixed(1)}" text-anchor="middle" font-size="12" style="pointer-events:none">${this._escHtml(label)}</text>
+        ${p.name ? `<text x="${(x + 17).toFixed(1)}" y="${(y - 10).toFixed(1)}" class="route-label" font-size="10">${this._escHtml(p.name)}</text>` : ""}
+        <title>${this._escHtml(p.name)}</title>
+      </g>`;
+    }).join("");
+
+    return `
+      <div style="font-size:0.78em;opacity:0.55;padding:0 0 6px">All parcels — click a dot to view route &amp; details</div>
+      <svg class="route-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="max-height:300px">${dots}</svg>`;
   }
 
   _renderRouteMap(state) {
@@ -199,6 +247,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         @keyframes pulse { 0%,100%{r:7;opacity:1} 50%{r:10;opacity:0.6} }
         .route-label { fill: var(--secondary-text-color, #aaa); font-size: 9px; }
         .map-empty { padding: 20px; opacity: 0.5; text-align: center; }
+        .overview-dot { fill: var(--primary-color, #1976d2); opacity: 0.9; animation: pulse 2s ease-in-out infinite; }
+        .overview-dot-delivered { fill: var(--success-color, #4caf50); opacity: 0.75; }
+        .overview-parcel:hover .overview-dot,
+        .overview-parcel:hover .overview-dot-delivered { opacity: 1; filter: brightness(1.15); }
         .detail-pane { max-width: 720px; }
         .detail-pane h2 { margin: 0 0 4px; font-size: 1.1em; }
         .detail-tracking { font-size: 0.8em; opacity: 0.6; margin-bottom: 12px; }
@@ -238,13 +290,17 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         <div class="right-pane">
           ${selected
             ? this._renderRouteMap(selected) + this._renderDetailPane(selected)
-            : `<div class="map-empty" style="padding-top:60px">Select a parcel to see its route and details.</div>`
+            : this._renderAllParcelsMap(parcels)
           }
         </div>
       </div>`;
 
     this._shadow.querySelectorAll(".parcel-row").forEach((row) => {
       row.addEventListener("click", () => this._selectParcel(row.dataset.id));
+    });
+
+    this._shadow.querySelectorAll(".overview-parcel").forEach((g) => {
+      g.addEventListener("click", () => this._selectParcel(g.dataset.id));
     });
 
     if (selected) {
