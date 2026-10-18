@@ -142,6 +142,9 @@ class ParcelMetaStore:
     async def async_load(self) -> None:
         raw = await self._store.async_load() or {}
         self._data = raw.get("parcels", {})
+        for entry in self._data.values():
+            if entry.get("note") and not entry.get("notes"):
+                entry["notes"] = [{"text": entry["note"], "ts": "migrated", "idx": 0}]
 
     def get(self, tracking_number: str) -> dict[str, Any]:
         return dict(self._data.get(tracking_number.upper(), {}))
@@ -163,6 +166,34 @@ class ParcelMetaStore:
         key = tracking_number.upper()
         entry = dict(self._data.get(key, {}))
         entry.pop(field, None)
+        self._data[key] = entry
+        self._store.async_delay_save(
+            lambda: {"version": _STORE_VERSION, "parcels": dict(self._data)}, _SAVE_DELAY
+        )
+
+    async def async_add_note(self, tracking_number: str, text: str) -> None:
+        from datetime import datetime, timezone
+        key = tracking_number.upper()
+        entry = dict(self._data.get(key, {}))
+        notes = list(entry.get("notes", []))
+        next_idx = max((n["idx"] for n in notes), default=-1) + 1
+        notes.append({"text": text, "ts": datetime.now(timezone.utc).isoformat(), "idx": next_idx})
+        entry["notes"] = notes
+        entry["note"] = text
+        self._data[key] = entry
+        self._store.async_delay_save(
+            lambda: {"version": _STORE_VERSION, "parcels": dict(self._data)}, _SAVE_DELAY
+        )
+
+    async def async_delete_note(self, tracking_number: str, idx: int) -> None:
+        key = tracking_number.upper()
+        entry = dict(self._data.get(key, {}))
+        notes = [n for n in entry.get("notes", []) if n["idx"] != idx]
+        entry["notes"] = notes
+        if notes:
+            entry["note"] = notes[-1]["text"]
+        else:
+            entry.pop("note", None)
         self._data[key] = entry
         self._store.async_delay_save(
             lambda: {"version": _STORE_VERSION, "parcels": dict(self._data)}, _SAVE_DELAY
