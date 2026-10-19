@@ -34,8 +34,8 @@ const _NO = {
   "📝 Note": "📝 Notat",
 };
 
-const _CARTO_TILES = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-const _CARTO_ATTR = "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>";
+const _CARTO_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const _CARTO_ATTR = "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors";
 const _LEAFLET_CSS = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
 const _LEAFLET_JS  = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
 
@@ -792,7 +792,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const ordered = [...coords].reverse();
     const latLngs = ordered.map((c) => [c.lat, c.lng]);
     const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
-    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
+    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, maxZoom: 19 }).addTo(map);
     map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24] });
     this._leafletMap = map;
 
@@ -844,7 +844,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     const allLatLngs = parcelRoutes.flatMap((p) => p.coords.map((c) => [c.lat, c.lng]));
     const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false });
-    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
+    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, maxZoom: 19 }).addTo(map);
     map.fitBounds(L.latLngBounds(allLatLngs), { padding: [24, 24] });
     this._leafletMap = map;
 
