@@ -75,8 +75,31 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       .replace(/"/g, "&quot;");
   }
 
-  _renderIcon(icon) {
-    if (!icon) return `<ha-icon icon="mdi:package-variant-closed"></ha-icon>`;
+  _statusToMdi(code) {
+    if (!code) return "mdi:package-variant-closed";
+    switch (code) {
+      case "DELIVERED":
+      case "PICKED_UP":           return "mdi:check-circle";
+      case "LOADED_FOR_DELIVERY": return "mdi:truck-delivery";
+      case "IN_TRANSIT":          return "mdi:truck-fast";
+      case "NOTIFICATION_SENT":
+      case "READY_FOR_PICKUP":    return "mdi:store";
+      case "ATTEMPTED_DELIVERY":  return "mdi:alert-circle";
+      case "CUSTOMS":
+      case "AT_CUSTOMS":          return "mdi:shield-check";
+      case "RETURN_IN_TRANSIT":
+      case "RETURNED":            return "mdi:package-variant-remove";
+      case "EXPIRED":
+      case "CANCELLED":           return "mdi:close-circle";
+      case "AWAITING_SENDER":
+      case "REGISTERED":          return "mdi:clock-outline";
+      default:                    return "mdi:package-variant-closed";
+    }
+  }
+
+  _renderIcon(icon, statusCode) {
+    const fallback = this._statusToMdi(statusCode);
+    if (!icon) return `<ha-icon icon="${fallback}"></ha-icon>`;
     if (icon.startsWith("mdi:")) return `<ha-icon icon="${this._escHtml(icon)}"></ha-icon>`;
     if (icon.startsWith("http://") || icon.startsWith("https://"))
       return `<img class="parcel-icon-img" src="${this._escHtml(icon)}" alt="">`;
@@ -538,7 +561,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     const rows = parcels.map((s) => {
       const a = s.attributes;
-      const icon = this._renderIcon(a.npt_icon);
+      const icon = this._renderIcon(a.npt_icon, a.status_code);
       const name = a.display_name || a.sender_name || a.tracking_number || s.entity_id;
       const status = s.state || "";
       const isActive = s.entity_id === this._selected;
