@@ -266,6 +266,37 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     });
   }
 
+  _showAddParcelDialog() {
+    const overlay = this._showModal(`
+      <div class="npt-dialog">
+        <h3>${this._isNo ? "📦 Legg til pakke" : "📦 Add parcel"}</h3>
+        <span class="npt-label">${this._isNo ? "Sporingsnummer" : "Tracking number"}</span>
+        <input class="npt-input" id="npt-tn-inp" type="text" placeholder="e.g. 00370726600123456789" maxlength="60" autocomplete="off" spellcheck="false">
+        <span class="npt-label" style="margin-top:10px">${this._isNo ? "Visningsnavn (valgfritt)" : "Display name (optional)"}</span>
+        <input class="npt-input" id="npt-name-inp" type="text" placeholder="${this._isNo ? "f.eks. Ny laptop" : "e.g. New laptop"}" maxlength="100">
+        <div class="npt-actions">
+          <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
+          <button class="npt-btn npt-btn-primary" id="npt-save">${this._isNo ? "Legg til" : "Add"}</button>
+        </div>
+      </div>`);
+    const tnInp = overlay.querySelector("#npt-tn-inp");
+    const nameInp = overlay.querySelector("#npt-name-inp");
+    tnInp.focus();
+    overlay.querySelector("#npt-cancel").addEventListener("click", () => this._closeModal());
+    const doAdd = () => {
+      const tracking_number = tnInp.value.trim().replace(/\s+/g, "");
+      if (!tracking_number) { tnInp.style.borderColor = "var(--error-color, #cf6679)"; tnInp.focus(); return; }
+      const data = { tracking_number };
+      const name = nameInp.value.trim();
+      if (name) data.name = name;
+      this._callService("norwegian_parcel_tracker", "add_parcel", data);
+      this._closeModal();
+    };
+    overlay.querySelector("#npt-save").addEventListener("click", doAdd);
+    tnInp.addEventListener("keydown", (e) => { if (e.key === "Enter") nameInp.focus(); if (e.key === "Escape") this._closeModal(); });
+    nameInp.addEventListener("keydown", (e) => { if (e.key === "Enter") doAdd(); if (e.key === "Escape") this._closeModal(); });
+  }
+
   _showNoteDialog(tn, current) {
     const overlay = this._showModal(`
       <div class="npt-dialog">
@@ -538,6 +569,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .panel-header-title { flex: 1; }
         .btn-settings { background: transparent; border: none; color: var(--app-header-text-color,#fff); cursor: pointer; font-size: 1.1em; padding: 4px 8px; border-radius: 4px; opacity: 0.8; }
         .btn-settings:hover { opacity: 1; background: rgba(255,255,255,0.12); }
+        .btn-add-parcel { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); color: var(--app-header-text-color,#fff); cursor: pointer; font-size: 0.82em; padding: 4px 12px; border-radius: 4px; font-family: inherit; margin-right: 6px; }
+        .btn-add-parcel:hover { background: rgba(255,255,255,0.25); }
         .panel-body { display: flex; flex: 1; overflow: hidden; }
         .left-pane { width: 44%; min-width: 280px; display: flex; flex-direction: column; border-right: 1px solid var(--divider-color, #333); overflow: hidden; }
         .no-selected .left-pane { width: 100%; border-right: none; }
@@ -613,6 +646,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       <div class="panel-header">
         <ha-icon icon="mdi:package-variant-closed"></ha-icon>
         <span class="panel-header-title">Pakker</span>
+        <button class="btn-add-parcel" id="btn-add-parcel">+ ${this._isNo ? "Legg til pakke" : "Add parcel"}</button>
         <button class="btn-settings" id="btn-settings" title="Innstillinger">⚙️</button>
       </div>
       <div class="panel-body ${selected ? "" : "no-selected"}">
@@ -638,6 +672,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         </div>
       </div>`;
 
+    this._shadow.getElementById("btn-add-parcel")?.addEventListener("click", () => this._showAddParcelDialog());
     this._shadow.getElementById("btn-settings")?.addEventListener("click", () => this._showSettingsDialog());
 
     this._shadow.querySelectorAll(".col-note[data-tn]").forEach((cell) => {
