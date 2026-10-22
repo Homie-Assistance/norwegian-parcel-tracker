@@ -58,8 +58,52 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._parcels = Object.values(hass.states).filter(
       (s) => s.attributes && s.attributes.npt_master_entity === true
     );
-    if (this._shadow.getElementById("npt-overlay")) return;
+    // Panel already rendered — update only the table rows, never the map
+    if (this._shadow.getElementById("npt-panel-body")) {
+      this._patchParcelRows();
+      return;
+    }
     this._render();
+  }
+
+  _buildParcelRows() {
+    const parcels = this._parcels;
+    return parcels.map((s) => {
+      const a = s.attributes;
+      const icon = this._renderIcon(a.npt_icon, a.status_code);
+      const name = a.display_name || a.sender_name || a.tracking_number || s.entity_id;
+      const status = s.state || "";
+      const isActive = s.entity_id === this._selected;
+      const curCoord = a.route_coords && a.route_coords[0];
+      const loc = (curCoord && curCoord.location || "").split(",")[0].trim();
+      const locTime = curCoord && curCoord.date_iso ? curCoord.date_iso.slice(0, 16).replace("T", " ") : "";
+      const notePreview = a.note ? a.note.slice(0, 45) + (a.note.length > 45 ? "…" : "") : "";
+      const tn = a.tracking_number || s.entity_id;
+      return `
+        <tr class="parcel-row ${isActive ? "selected" : ""}" data-id="${s.entity_id}">
+          <td class="col-icon">${icon}</td>
+          <td class="col-name">${this._escHtml(name)}</td>
+          <td class="col-status">${this._escHtml(status)}</td>
+          <td class="col-loc">${this._escHtml(loc)}${locTime ? `<br><span class="col-loc-time">${this._escHtml(locTime)}</span>` : ""}</td>
+          <td class="col-eta">${this._escHtml(a.estimated_delivery_iso ? a.estimated_delivery_iso.slice(0,10) : "")}</td>
+          ${notePreview ? `<td class="col-note" data-tn="${this._escHtml(tn)}" data-note="${this._escHtml(a.note || "")}">📝 ${this._escHtml(notePreview)}</td>` : "<td></td>"}
+        </tr>`;
+    }).join("");
+  }
+
+  _patchParcelRows() {
+    const tbody = this._shadow.querySelector(".parcel-table tbody");
+    if (!tbody) return;
+    tbody.innerHTML = this._buildParcelRows();
+    this._shadow.querySelectorAll(".parcel-row").forEach((row) => {
+      row.addEventListener("click", () => this._selectParcel(row.dataset.id));
+    });
+    this._shadow.querySelectorAll(".col-note[data-tn]").forEach((cell) => {
+      cell.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._showNoteDialog(cell.dataset.tn, cell.dataset.note || "");
+      });
+    });
   }
 
   set panel(panel) {
@@ -559,27 +603,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       ? parcels.find((s) => s.entity_id === this._selected)
       : null;
 
-    const rows = parcels.map((s) => {
-      const a = s.attributes;
-      const icon = this._renderIcon(a.npt_icon, a.status_code);
-      const name = a.display_name || a.sender_name || a.tracking_number || s.entity_id;
-      const status = s.state || "";
-      const isActive = s.entity_id === this._selected;
-      const curCoord = a.route_coords && a.route_coords[0];
-      const loc = (curCoord && curCoord.location || "").split(",")[0].trim();
-      const locTime = curCoord && curCoord.date_iso ? curCoord.date_iso.slice(0, 16).replace("T", " ") : "";
-      const notePreview = a.note ? a.note.slice(0, 45) + (a.note.length > 45 ? "…" : "") : "";
-      const tn = a.tracking_number || s.entity_id;
-      return `
-        <tr class="parcel-row ${isActive ? "selected" : ""}" data-id="${s.entity_id}">
-          <td class="col-icon">${icon}</td>
-          <td class="col-name">${this._escHtml(name)}</td>
-          <td class="col-status">${this._escHtml(status)}</td>
-          <td class="col-loc">${this._escHtml(loc)}${locTime ? `<br><span class="col-loc-time">${this._escHtml(locTime)}</span>` : ""}</td>
-          <td class="col-eta">${this._escHtml(a.estimated_delivery_iso ? a.estimated_delivery_iso.slice(0,10) : "")}</td>
-          ${notePreview ? `<td class="col-note" data-tn="${this._escHtml(tn)}" data-note="${this._escHtml(a.note || "")}">📝 ${this._escHtml(notePreview)}</td>` : "<td></td>"}
-        </tr>`;
-    }).join("");
+    const rows = this._buildParcelRows();
 
     if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
 
@@ -672,7 +696,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         <button class="btn-add-parcel" id="btn-add-parcel">+ ${this._isNo ? "Legg til pakke" : "Add parcel"}</button>
         <button class="btn-settings" id="btn-settings" title="Innstillinger">⚙️</button>
       </div>
-      <div class="panel-body ${selected ? "" : "no-selected"}">
+      <div class="panel-body ${selected ? "" : "no-selected"}" id="npt-panel-body">
         <div class="left-pane">
           ${parcels.length === 0
             ? `<div class="no-parcels">${this._t("No parcels tracked.")}<br>${this._t("Add one via the integration.")}</div>`
