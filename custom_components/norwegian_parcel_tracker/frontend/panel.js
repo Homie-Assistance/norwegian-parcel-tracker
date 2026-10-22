@@ -85,8 +85,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       const locTime = curCoord && curCoord.date_iso ? curCoord.date_iso.slice(0, 16).replace("T", " ") : "";
       const notePreview = a.note ? a.note.slice(0, 45) + (a.note.length > 45 ? "…" : "") : "";
       const tn = a.tracking_number || s.entity_id;
+      const statusKey = this._parcelStatusColor(s);
       return `
-        <tr class="parcel-row ${isActive ? "selected" : ""}" data-id="${s.entity_id}">
+        <tr class="parcel-row status-${statusKey} ${isActive ? "selected" : ""}" data-id="${s.entity_id}">
           <td class="col-icon">${icon}</td>
           <td class="col-name">${this._escHtml(name)}</td>
           <td class="col-status">${this._escHtml(status)}</td>
@@ -204,6 +205,55 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _mapDefaultZoom()  { return this._getSetting("npt-map-zoom-mode", "last2"); }
   _possiblyLostDays(){ return parseInt(this._getSetting("npt-possibly-lost-days", "3"), 10); }
   _lostDays()        { return parseInt(this._getSetting("npt-lost-days", "5"), 10); }
+
+  // Returns a status key string used for both row CSS classes and map polyline color.
+  _parcelStatusColor(state) {
+    const code = (state.attributes.status_code || "").toUpperCase();
+    if (["DELIVERED", "PICKED_UP"].includes(code))           return "delivered";
+    if (["READY_FOR_PICKUP", "NOTIFICATION_SENT"].includes(code)) return "pickup-ready";
+    if (["CANCELLED", "EXPIRED"].includes(code))             return "cancelled";
+    if (["RETURNED", "RETURN_IN_TRANSIT"].includes(code))    return "returned";
+    if (["CUSTOMS", "AT_CUSTOMS"].includes(code))            return "parked";
+    if (code === "ATTEMPTED_DELIVERY")                        return "delayed";
+    // Stale check — uses user-configurable thresholds from settings
+    const lastDate = state.attributes.route_coords
+      && state.attributes.route_coords[0]
+      && state.attributes.route_coords[0].date_iso;
+    if (lastDate) {
+      const daysSince = (Date.now() - new Date(lastDate).getTime()) / 864e5;
+      if (daysSince >= this._lostDays())         return "lost";
+      if (daysSince >= this._possiblyLostDays()) return "possibly-lost";
+    }
+    return "default";
+  }
+
+  _statusLineColor(key) {
+    const MAP = {
+      "delivered":     "#2e7d32",
+      "pickup-ready":  "#f57f17",
+      "parked":        "#1565c0",
+      "delayed":       "#e65100",
+      "possibly-lost": "#bf360c",
+      "lost":          "#b71c1c",
+      "cancelled":     "#455a64",
+      "returned":      "#455a64",
+    };
+    return MAP[key] || "#4a2800";
+  }
+
+  _statusMarkerEmoji(key, customIcon) {
+    if (customIcon && !customIcon.startsWith("mdi:") && !customIcon.startsWith("http")) return customIcon;
+    const MAP = {
+      "delivered":     "✅",
+      "pickup-ready":  "📬",
+      "lost":          "❓",
+      "possibly-lost": "⚠️",
+      "parked":        "⏸️",
+      "returned":      "↩️",
+      "cancelled":     "✖️",
+    };
+    return MAP[key] || "✈️";
+  }
 
   _filterParcels(query) {
     this._filterText = (query || "").toLowerCase().trim();
@@ -783,6 +833,21 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .no-parcels { padding: 32px; text-align: center; opacity: 0.5; }
         table { table-layout: fixed; width: 100%; }
         .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .parcel-row.status-delivered    { background: rgba(46,125,50,0.13); }
+        .parcel-row.status-pickup-ready { animation: npt-blink-pickup 1.6s ease-in-out infinite; }
+        .parcel-row.status-parked       { background: rgba(21,101,192,0.11); }
+        .parcel-row.status-delayed      { background: rgba(230,81,0,0.12); }
+        .parcel-row.status-possibly-lost{ background: rgba(191,54,12,0.13); }
+        .parcel-row.status-lost         { background: rgba(183,28,28,0.16); }
+        .parcel-row.status-cancelled,
+        .parcel-row.status-returned     { background: rgba(69,90,100,0.12); }
+        @keyframes npt-blink-pickup {
+          0%,100% { background: rgba(245,127,23,0.10); }
+          50%     { background: rgba(245,127,23,0.32); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .parcel-row.status-pickup-ready { animation: none; background: rgba(245,127,23,0.18); }
+        }
       </style>
 
       <div class="panel-header">
@@ -932,17 +997,19 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     }
     this._leafletMap = map;
 
-    L.polyline(latLngs, { color: "#4a2800", weight: 3, opacity: 0.85, dashArray: "8 5" }).addTo(map);
+    const statusKey  = this._parcelStatusColor(state);
+    const lineColor  = this._statusLineColor(statusKey);
+    const markerEmoji = this._statusMarkerEmoji(statusKey, state.attributes.npt_icon || "");
+
+    L.polyline(latLngs, { color: lineColor, weight: 3, opacity: 0.88, dashArray: "8 5" }).addTo(map);
 
     ordered.slice(0, -1).forEach((c) => {
       const tip = `${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`;
-      L.circleMarker([c.lat, c.lng], { radius: 5, color: "#4a2800", fillColor: "#7a4800", fillOpacity: 0.6, weight: 1.5 })
+      L.circleMarker([c.lat, c.lng], { radius: 5, color: lineColor, fillColor: lineColor, fillOpacity: 0.55, weight: 1.5 })
         .bindTooltip(tip).addTo(map);
     });
 
     const cur = coords[0];
-    const isDelivered = /delivered|levert|hentet/i.test(state.state || "");
-    const planeEmoji = isDelivered ? "✅" : "✈️";
     let bearing = 0;
     if (coords.length >= 2) {
       const dLat = coords[0].lat - coords[1].lat;
@@ -950,7 +1017,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       bearing = Math.atan2(dLng, dLat) * (180 / Math.PI);
     }
     const planeIcon = L.divIcon({
-      html: `<div class="npt-plane" style="transform:rotate(${bearing.toFixed(0)}deg)">${planeEmoji}</div>`,
+      html: `<div class="npt-plane" style="transform:rotate(${bearing.toFixed(0)}deg)">${markerEmoji}</div>`,
       className: "npt-plane-wrap",
       iconSize: [30, 30],
       iconAnchor: [15, 15],
