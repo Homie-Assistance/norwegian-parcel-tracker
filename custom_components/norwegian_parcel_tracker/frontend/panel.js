@@ -230,6 +230,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       if (daysSince >= this._lostDays())         return "lost";
       if (daysSince >= this._possiblyLostDays()) return "possibly-lost";
     }
+    if (["IN_TRANSIT", "LOADED_FOR_DELIVERY"].includes(code)) return "in-transit";
     return "default";
   }
 
@@ -252,6 +253,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const MAP = {
       "delivered":     "✅",
       "pickup-ready":  "📬",
+      "in-transit":    "🚚",
       "lost":          "❓",
       "possibly-lost": "⚠️",
       "parked":        "⏸️",
@@ -259,6 +261,27 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       "cancelled":     "✖️",
     };
     return MAP[key] || "✈️";
+  }
+
+  // Computes a simple next-update ETA from the spacing between recent route stops.
+  _estimateNextUpdate(state) {
+    const coords = (state.attributes.route_coords || []);
+    if (coords.length < 2) return null;
+    const intervals = [];
+    for (let i = 0; i < Math.min(coords.length - 1, 6); i++) {
+      const t1 = new Date(coords[i].date_iso).getTime();
+      const t2 = new Date(coords[i + 1].date_iso).getTime();
+      if (!isNaN(t1) && !isNaN(t2) && t1 > t2) intervals.push(t1 - t2);
+    }
+    if (intervals.length === 0) return null;
+    intervals.sort((a, b) => a - b);
+    const medianMs = intervals[Math.floor(intervals.length / 2)];
+    const msSinceLast = Date.now() - new Date(coords[0].date_iso).getTime();
+    return {
+      nextInHours: Math.max(0, medianMs - msSinceLast) / 3600000,
+      medianHours: medianMs / 3600000,
+      sampleCount: intervals.length,
+    };
   }
 
   _filterParcels(query) {
@@ -686,10 +709,31 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           </div>`;
         }).join("");
 
+    const terminalStates = ["DELIVERED", "PICKED_UP", "CANCELLED", "EXPIRED", "RETURNED"];
+    const isTerminal = terminalStates.includes((a.status_code || "").toUpperCase());
+    const eta = !isTerminal ? this._estimateNextUpdate(state) : null;
+    const no = this._isNo;
+    let etaHtml = "";
+    if (eta) {
+      const hours = eta.nextInHours;
+      const valStr = hours < 0.5
+        ? (no ? "Innen kort tid" : "Soon")
+        : hours < 24
+          ? `~${hours.toFixed(0)}h`
+          : `~${(hours / 24).toFixed(1)}${no ? "d" : "d"}`;
+      const noteStr = `(${no ? "basert på " + eta.sampleCount + " stopp" : eta.sampleCount + " stops"})`;
+      etaHtml = `<div class="detail-eta">
+        <span class="eta-label">${no ? "Estimert neste oppdatering" : "Est. next update"}:</span>
+        <span class="eta-val">${this._escHtml(valStr)}</span>
+        <span class="eta-note">${this._escHtml(noteStr)}</span>
+      </div>`;
+    }
+
     return `
       <div class="detail-pane">
         <h2>${this._escHtml(a.display_name || a.sender_name || trackingNum)}</h2>
         <div class="detail-tracking">${this._escHtml(trackingNum)}</div>
+        ${etaHtml}
 
         <div class="detail-actions">
           <button class="btn" id="btn-rename">${this._t("✏️ Rename")}</button>
@@ -819,7 +863,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .map-empty { padding: 20px; opacity: 0.5; text-align: center; }
         .detail-pane { max-width: 720px; }
         .detail-pane h2 { margin: 0 0 4px; font-size: 1.1em; }
-        .detail-tracking { font-size: 0.8em; opacity: 0.6; margin-bottom: 12px; }
+        .detail-tracking { font-size: 0.8em; opacity: 0.6; margin-bottom: 4px; }
+        .detail-eta { display:flex; align-items:baseline; gap:7px; font-size:0.8em; padding:4px 0 10px; }
+        .eta-label { opacity:0.6; }
+        .eta-val { font-weight:600; color:var(--primary-color,#42a5f5); }
+        .eta-note { opacity:0.4; font-size:0.88em; }
         .note-box {
           background: var(--secondary-background-color, #1e1e1e);
           border-left: 3px solid #ffd740;
