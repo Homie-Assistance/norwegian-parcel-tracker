@@ -45,10 +45,16 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._hass = null;
     this._parcels = [];
     this._selected = null;
+    this._filterText = "";
     this._shadow = this.attachShadow({ mode: "open" });
     this._leafletMap = null;
-    const lang = (navigator.language || "").toLowerCase();
-    this._isNo = lang.startsWith("nb") || lang.startsWith("no") || lang.startsWith("nn");
+    const nav = (navigator.language || "").toLowerCase();
+    const navIsNo = nav.startsWith("nb") || nav.startsWith("no") || nav.startsWith("nn");
+    let savedLang = "auto";
+    try { savedLang = localStorage.getItem("npt-language") || "auto"; } catch {}
+    if (savedLang === "nb") this._isNo = true;
+    else if (savedLang === "en") this._isNo = false;
+    else this._isNo = navIsNo;
   }
 
   _t(k) { return (this._isNo && _NO[k]) ? _NO[k] : k; }
@@ -104,6 +110,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         this._showNoteDialog(cell.dataset.tn, cell.dataset.note || "");
       });
     });
+    if (this._filterText) this._filterParcels(this._filterText);
   }
 
   set panel(panel) {
@@ -176,8 +183,34 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     return { tracking: null, trackingLabel: null };
   }
 
-  _searchEngine() {
-    try { return localStorage.getItem("npt-search-engine") || "google"; } catch { return "google"; }
+  _getSetting(key, def) {
+    try { const v = localStorage.getItem(key); return v !== null ? v : def; } catch { return def; }
+  }
+
+  _setSetting(key, val) {
+    try { localStorage.setItem(key, String(val)); } catch {}
+  }
+
+  _applyLangSetting(lang) {
+    if (lang === "nb") this._isNo = true;
+    else if (lang === "en") this._isNo = false;
+    else {
+      const nav = (navigator.language || "").toLowerCase();
+      this._isNo = nav.startsWith("nb") || nav.startsWith("no") || nav.startsWith("nn");
+    }
+  }
+
+  _searchEngine()    { return this._getSetting("npt-search-engine", "google"); }
+  _mapDefaultZoom()  { return this._getSetting("npt-map-zoom-mode", "last2"); }
+  _possiblyLostDays(){ return parseInt(this._getSetting("npt-possibly-lost-days", "3"), 10); }
+  _lostDays()        { return parseInt(this._getSetting("npt-lost-days", "5"), 10); }
+
+  _filterParcels(query) {
+    this._filterText = (query || "").toLowerCase().trim();
+    this._shadow.querySelectorAll(".parcel-row").forEach((row) => {
+      const visible = !this._filterText || row.textContent.toLowerCase().includes(this._filterText);
+      row.style.display = visible ? "" : "none";
+    });
   }
 
   _disruptionSearchUrl(routeCoords) {
@@ -202,33 +235,90 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   }
 
   _showSettingsDialog() {
-    const cur = this._searchEngine();
-    const opts = [
-      { key: "google", label: "Google Nyheter" },
-      { key: "bing",   label: "Bing Nyheter" },
-      { key: "ddg",    label: "DuckDuckGo" },
-      { key: "brave",  label: "Brave" },
-    ];
-    const radios = opts.map((o) => `
-      <label style="display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer">
-        <input type="radio" name="npt-engine" value="${o.key}" ${o.key === cur ? "checked" : ""} style="accent-color:var(--primary-color,#1976d2)">
-        ${o.label}
-      </label>`).join("");
+    const engine  = this._searchEngine();
+    const zoom    = this._mapDefaultZoom();
+    const posLost = this._possiblyLostDays();
+    const lost    = this._lostDays();
+    const lang    = this._getSetting("npt-language", "auto");
+
+    const no = this._isNo;
+
+    const _row = (label, val, name, checked) =>
+      `<label style="display:flex;align-items:center;gap:8px;margin:5px 0;cursor:pointer;font-size:0.9em">
+         <input type="radio" name="${name}" value="${val}" ${checked ? "checked" : ""} style="accent-color:var(--primary-color,#1976d2)">${label}
+       </label>`;
+
+    const _sec = (title, body) =>
+      `<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--divider-color,#333)">
+         <div style="font-size:0.68em;text-transform:uppercase;letter-spacing:.09em;opacity:.5;margin-bottom:8px">${title}</div>
+         ${body}
+       </div>`;
+
+    const langSection = _sec(no ? "Språk" : "Language", [
+      _row(no ? "Automatisk (nettleser)" : "Auto-detect (browser)", "auto", "npt-lang", lang === "auto"),
+      _row("Norsk",   "nb", "npt-lang", lang === "nb"),
+      _row("English", "en", "npt-lang", lang === "en"),
+    ].join(""));
+
+    const zoomSection = _sec(no ? "Kart — standardvisning" : "Map — default view", [
+      _row(no ? "Siste 2 stopp (nåværende + forrige)" : "Last 2 stops (current + previous)", "last2", "npt-zoom", zoom !== "all"),
+      _row(no ? "Hele ruten" : "Full route", "all", "npt-zoom", zoom === "all"),
+    ].join(""));
+
+    const threshSection = _sec(no ? "Statusterskel (dager uten oppdatering)" : "Status thresholds (days without update)",
+      `<div style="display:flex;flex-direction:column;gap:8px">
+         <div style="display:flex;align-items:center;gap:10px">
+           <span style="flex:1;font-size:0.88em">${no ? "⚠️ Mulig tapt etter" : "⚠️ Possibly lost after"}</span>
+           <input type="number" id="npt-possibly-lost" value="${posLost}" min="1" max="30" class="npt-input" style="width:52px;text-align:center" autocomplete="off">
+           <span style="font-size:0.82em;opacity:.65">${no ? "dager" : "days"}</span>
+         </div>
+         <div style="display:flex;align-items:center;gap:10px">
+           <span style="flex:1;font-size:0.88em">${no ? "🔴 Tapt etter" : "🔴 Lost after"}</span>
+           <input type="number" id="npt-lost" value="${lost}" min="1" max="90" class="npt-input" style="width:52px;text-align:center" autocomplete="off">
+           <span style="font-size:0.82em;opacity:.65">${no ? "dager" : "days"}</span>
+         </div>
+       </div>`);
+
+    const engineSection = _sec(no ? "Søkemotor (forstyrrelsessøk)" : "Search engine (disruption search)", [
+      _row("Google",     "google", "npt-engine", engine === "google"),
+      _row("Bing",       "bing",   "npt-engine", engine === "bing"),
+      _row("DuckDuckGo", "ddg",    "npt-engine", engine === "ddg"),
+      _row("Brave",      "brave",  "npt-engine", engine === "brave"),
+    ].join(""));
+
     const overlay = this._showModal(`
-      <div class="npt-dialog">
-        <h3>⚙️ Innstillinger</h3>
-        <span class="npt-label">Søkemotor for forstyrrelser</span>
-        ${radios}
+      <div class="npt-dialog" style="max-height:82vh;overflow-y:auto;max-width:400px">
+        <h3>⚙️ ${no ? "Innstillinger" : "Settings"}</h3>
+        ${langSection}${zoomSection}${threshSection}${engineSection}
         <div class="npt-actions">
-          <button class="npt-btn npt-btn-secondary" id="npt-cancel">Avbryt</button>
-          <button class="npt-btn npt-btn-primary" id="npt-settings-save">Lagre</button>
+          <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
+          <button class="npt-btn npt-btn-primary" id="npt-settings-save">${this._t("Save")}</button>
         </div>
       </div>`);
+
     overlay.querySelector("#npt-cancel").addEventListener("click", () => this._closeModal());
     overlay.querySelector("#npt-settings-save").addEventListener("click", () => {
-      const chosen = overlay.querySelector("input[name='npt-engine']:checked");
-      if (chosen) { try { localStorage.setItem("npt-search-engine", chosen.value); } catch {} }
+      const chosenEngine = overlay.querySelector("input[name='npt-engine']:checked")?.value;
+      if (chosenEngine) this._setSetting("npt-search-engine", chosenEngine);
+
+      const chosenZoom = overlay.querySelector("input[name='npt-zoom']:checked")?.value;
+      if (chosenZoom) this._setSetting("npt-map-zoom-mode", chosenZoom);
+
+      const posLostVal = parseInt(overlay.querySelector("#npt-possibly-lost")?.value || "3", 10);
+      const lostVal    = parseInt(overlay.querySelector("#npt-lost")?.value || "5", 10);
+      if (posLostVal >= 1) this._setSetting("npt-possibly-lost-days", posLostVal);
+      if (lostVal >= 1)    this._setSetting("npt-lost-days", lostVal);
+
+      const chosenLang = overlay.querySelector("input[name='npt-lang']:checked")?.value;
+      const prevLang   = this._getSetting("npt-language", "auto");
+      if (chosenLang) this._setSetting("npt-language", chosenLang);
+
       this._closeModal();
+
+      if (chosenLang && chosenLang !== prevLang) {
+        this._applyLangSetting(chosenLang);
+        this._render();
+      }
     });
   }
 
@@ -622,6 +712,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .left-pane { width: 44%; min-width: 280px; display: flex; flex-direction: column; border-right: 1px solid var(--divider-color, #333); overflow: hidden; }
         .no-selected .left-pane { width: 100%; border-right: none; }
         .right-pane { flex: 1; overflow: auto; padding: 12px; }
+        .left-toolbar { display:flex; align-items:center; gap:5px; padding:7px 8px 6px; border-bottom:1px solid var(--divider-color,#333); }
+        .left-filter { flex:1; background:var(--secondary-background-color,#1e1e1e); color:var(--primary-text-color,#eee); border:1px solid var(--divider-color,#444); border-radius:4px; padding:5px 8px; font-size:0.82em; font-family:inherit; outline:none; }
+        .left-filter:focus { border-color:var(--primary-color,#1976d2); }
+        .btn-left-settings { background:transparent; border:none; color:var(--primary-text-color,#eee); cursor:pointer; font-size:1em; padding:3px 6px; border-radius:4px; opacity:0.6; line-height:1; }
+        .btn-left-settings:hover { opacity:1; background:rgba(255,255,255,0.07); }
         .parcel-table { width: 100%; border-collapse: collapse; overflow-y: auto; }
         .parcel-table th { text-align: left; padding: 6px 8px; font-size: 0.75em; text-transform: uppercase; opacity: 0.6; border-bottom: 1px solid var(--divider-color, #333); }
         .parcel-row { cursor: pointer; }
@@ -698,6 +793,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       </div>
       <div class="panel-body ${selected ? "" : "no-selected"}" id="npt-panel-body">
         <div class="left-pane">
+          <div class="left-toolbar">
+            <input class="left-filter" id="npt-filter" type="search" placeholder="${this._isNo ? "Filtrer pakker…" : "Filter parcels…"}">
+            <button class="btn-left-settings" id="btn-left-settings" title="${this._isNo ? "Innstillinger" : "Settings"}">⚙️</button>
+          </div>
           ${parcels.length === 0
             ? `<div class="no-parcels">${this._t("No parcels tracked.")}<br>${this._t("Add one via the integration.")}</div>`
             : `<table class="parcel-table">
@@ -721,6 +820,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     this._shadow.getElementById("btn-add-parcel")?.addEventListener("click", () => this._showAddParcelDialog());
     this._shadow.getElementById("btn-settings")?.addEventListener("click", () => this._showSettingsDialog());
+    this._shadow.getElementById("btn-left-settings")?.addEventListener("click", () => this._showSettingsDialog());
+
+    const filterInp = this._shadow.getElementById("npt-filter");
+    if (filterInp) {
+      if (this._filterText) { filterInp.value = this._filterText; this._filterParcels(this._filterText); }
+      filterInp.addEventListener("input", () => this._filterParcels(filterInp.value));
+    }
 
     this._shadow.querySelectorAll(".col-note[data-tn]").forEach((cell) => {
       cell.addEventListener("click", (e) => {
@@ -817,7 +923,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const latLngs = ordered.map((c) => [c.lat, c.lng]);
     const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
     L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abc", maxZoom: 17 }).addTo(map);
-    map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24] });
+    const zoomMode = this._mapDefaultZoom();
+    if (zoomMode === "last2" && ordered.length >= 2) {
+      const last2 = ordered.slice(-2).map((c) => [c.lat, c.lng]);
+      map.fitBounds(L.latLngBounds(last2), { padding: [60, 60] });
+    } else {
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24] });
+    }
     this._leafletMap = map;
 
     L.polyline(latLngs, { color: "#4a2800", weight: 3, opacity: 0.85, dashArray: "8 5" }).addTo(map);
