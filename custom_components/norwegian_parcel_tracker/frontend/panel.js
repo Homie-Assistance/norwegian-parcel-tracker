@@ -203,6 +203,12 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   _searchEngine()    { return this._getSetting("npt-search-engine", "google"); }
   _mapDefaultZoom()  { return this._getSetting("npt-map-zoom-mode", "last2"); }
+
+  // Active stop count — saved per-device override, or derived from the zoom-mode default.
+  _activeStopCount() {
+    const def = this._mapDefaultZoom() === "last2" ? "2" : "all";
+    return this._getSetting("npt-map-stop-count", def);
+  }
   _possiblyLostDays(){ return parseInt(this._getSetting("npt-possibly-lost-days", "3"), 10); }
   _lostDays()        { return parseInt(this._getSetting("npt-lost-days", "5"), 10); }
 
@@ -733,7 +739,22 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _renderRouteMap(state) {
     const coords = (state && state.attributes && state.attributes.route_coords) || [];
     if (coords.length === 0) return `<div class="map-empty">${this._t("No route data")}</div>`;
-    return `<div class="map-frame"><div id="npt-route-map" class="leaflet-map-route"></div></div>`;
+    const active = this._activeStopCount();
+    const counts = [
+      { val: "2",   label: "2" },
+      { val: "5",   label: "5" },
+      { val: "10",  label: "10" },
+      { val: "all", label: this._isNo ? "Alle" : "All" },
+    ];
+    const btns = counts.map((c) =>
+      `<button class="map-ctrl-btn${c.val === active ? " active" : ""}" data-stops="${c.val}">${c.label}</button>`
+    ).join("");
+    return `
+      <div class="map-controls">
+        <span class="map-ctrl-label">${this._isNo ? "Stopp:" : "Stops:"}</span>
+        ${btns}
+      </div>
+      <div class="map-frame"><div id="npt-route-map" class="leaflet-map-route"></div></div>`;
   }
 
   _render() {
@@ -782,6 +803,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .col-loc-time { font-size: 0.85em; opacity: 0.5; display: block; }
         .col-note { font-size: 0.78em; color: #ffd740; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
         .col-note:hover { text-decoration: underline; }
+        .map-controls { display:flex; align-items:center; gap:5px; padding:5px 0 6px; }
+        .map-ctrl-label { font-size:0.74em; opacity:0.5; margin-right:2px; }
+        .map-ctrl-btn { background:transparent; border:1px solid var(--divider-color,#444); color:var(--primary-text-color,#eee); border-radius:4px; padding:3px 9px; cursor:pointer; font-size:0.78em; font-family:inherit; }
+        .map-ctrl-btn:hover { background:rgba(255,255,255,0.07); }
+        .map-ctrl-btn.active { background:var(--primary-color,#1976d2); border-color:transparent; color:#fff; }
         .map-frame { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; margin-bottom: 12px; background: #c8a96e; position: relative; }
         .map-frame-overview { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; background: #c8a96e; }
         .leaflet-map-route { height: 280px; width: 100%; display: block; filter: sepia(0.75) contrast(0.9) brightness(1.08) saturate(0.45) hue-rotate(8deg); }
@@ -893,6 +919,18 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       filterInp.addEventListener("input", () => this._filterParcels(filterInp.value));
     }
 
+    // Stop count toolbar — re-initializes route map in place (no full re-render)
+    this._shadow.querySelectorAll(".map-ctrl-btn[data-stops]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this._setSetting("npt-map-stop-count", btn.dataset.stops);
+        this._shadow.querySelectorAll(".map-ctrl-btn[data-stops]").forEach((b) =>
+          b.classList.toggle("active", b === btn));
+        if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
+        const selState = this._selected ? this._parcels.find((s) => s.entity_id === this._selected) : null;
+        if (selState) this._initRouteMap(selState).catch(() => {});
+      });
+    });
+
     this._shadow.querySelectorAll(".col-note[data-tn]").forEach((cell) => {
       cell.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -984,31 +1022,31 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     try { await this._ensureLeaflet(); } catch (e) { return; }
     const L = window.L;
 
-    const ordered = [...coords].reverse();
-    const latLngs = ordered.map((c) => [c.lat, c.lng]);
+    const ordered = [...coords].reverse(); // oldest first
+    // Slice to the active stop count
+    const stopCount = this._activeStopCount();
+    const maxStops = stopCount === "all" ? ordered.length : Math.min(parseInt(stopCount, 10), ordered.length);
+    const visible = ordered.slice(-maxStops); // most-recent N stops, oldest-first
+    const latLngs = visible.map((c) => [c.lat, c.lng]);
+
     const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
     L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abc", maxZoom: 17 }).addTo(map);
-    const zoomMode = this._mapDefaultZoom();
-    if (zoomMode === "last2" && ordered.length >= 2) {
-      const last2 = ordered.slice(-2).map((c) => [c.lat, c.lng]);
-      map.fitBounds(L.latLngBounds(last2), { padding: [60, 60] });
-    } else {
-      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24] });
-    }
+    map.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40] });
     this._leafletMap = map;
 
-    const statusKey  = this._parcelStatusColor(state);
-    const lineColor  = this._statusLineColor(statusKey);
+    const statusKey   = this._parcelStatusColor(state);
+    const lineColor   = this._statusLineColor(statusKey);
     const markerEmoji = this._statusMarkerEmoji(statusKey, state.attributes.npt_icon || "");
 
     L.polyline(latLngs, { color: lineColor, weight: 3, opacity: 0.88, dashArray: "8 5" }).addTo(map);
 
-    ordered.slice(0, -1).forEach((c) => {
+    visible.slice(0, -1).forEach((c) => {
       const tip = `${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`;
       L.circleMarker([c.lat, c.lng], { radius: 5, color: lineColor, fillColor: lineColor, fillOpacity: 0.55, weight: 1.5 })
         .bindTooltip(tip).addTo(map);
     });
 
+    // Bearing calculated from the two most-recent coords (full coords, not sliced)
     const cur = coords[0];
     let bearing = 0;
     if (coords.length >= 2) {
