@@ -94,9 +94,20 @@ Each parcel entry has its own options, accessible via **Configure** in the integ
 | Notify target | HA notify service for parcel updates (e.g. `notify.mobile_app_myphone`) | — |
 | Notify on all events | Send a notification on every new tracking event | Off |
 | Notify on delivery | Send a notification when the parcel is delivered | On |
-| Calendar entity | Create an all-day event on the estimated delivery date | — |
+| Calendar entity | Create a timed event on the estimated delivery date (opt-in, see [Calendar events](#calendar-events)) | — |
 | Stale warning (hours) | Hours without a new event before flagging the parcel as stuck | 24 |
 | Stale critical (hours) | Hours without a new event before flagging as critically stuck | 72 |
+
+---
+
+## Calendar events
+
+Enable **Create a timed calendar event** in a parcel's options, then set **Calendar entity** to the calendar where the event should appear. The integration creates a **1-hour timed event** on the estimated delivery date.
+
+- Events start at **08:00** and stagger by 30 minutes when multiple parcels are expected on the same day (08:00, 08:30, 09:00, …).
+- Deduplication by tracking number prevents duplicate events if Home Assistant restarts or the coordinator reloads.
+- No event is created for delivered parcels or parcels without an estimated delivery date.
+- The calendar entity must already exist in Home Assistant (the local calendar integration, or Google Calendar, etc.).
 
 ---
 
@@ -151,6 +162,26 @@ title: Pakker
 show_delivered: false
 highlight_stuck: true
 ```
+
+---
+
+## Map & status colors
+
+The built-in panel uses semantic colors so the delivery state is visible at a glance. The same colors appear on route map polylines, overview map routes, and the left-edge stripe on each row in the parcel list.
+
+| Color | Status | Meaning |
+|---|---|---|
+| Blue `#2196f3` | In transit | Parcel is actively moving |
+| Amber `#ff9800` | Ready for pickup | Human action required (blinks) |
+| Grey `#9e9e9e` | Delivered | Done — visually recedes |
+| Indigo `#3f51b5` | Parked / customs | Parcel is held at customs |
+| Deep orange `#ff5722` | Attempted delivery | Delivery was attempted; retry needed |
+| Red `#e53935` | Possibly lost | No movement for an extended period |
+| Dark red `#b71c1c` | Lost | Carrier has confirmed loss |
+| Purple `#9c27b0` | Returned | Parcel is heading back to sender |
+| Blue-grey `#607d8b` | Cancelled | Shipment cancelled / inactive |
+
+Active statuses (in transit, ready for pickup, delayed) use solid, heavier route lines. Terminal statuses (delivered, cancelled, returned) use faded dashed lines.
 
 ---
 

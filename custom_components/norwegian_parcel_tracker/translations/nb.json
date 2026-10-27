@@ -100,7 +100,7 @@
           "calendar_entity": "Kalender for estimert leveringsdato",
           "notify_all_events": "Varsle ved alle nye sporingshendelser",
           "notify_delivered": "Varsle når pakken er levert",
-          "create_calendar_event": "Opprett heldagsoppføring i kalender for estimert levering",
+          "create_calendar_event": "Opprett tidsbestemt kalenderoppføring for estimert levering",
           "stale_warning_hours": "Advarselsgrense — timer uten bevegelse",
           "stale_critical_hours": "Kritisk grense — timer uten bevegelse"
         }

@@ -100,7 +100,7 @@
           "calendar_entity": "Calendar for estimated delivery events",
           "notify_all_events": "Notify on every new tracking event",
           "notify_delivered": "Notify when parcel is delivered",
-          "create_calendar_event": "Create an all-day calendar event for estimated delivery",
+          "create_calendar_event": "Create a timed calendar event for estimated delivery",
           "stale_warning_hours": "Warning threshold — hours without movement",
           "stale_critical_hours": "Critical threshold — hours without movement"
         }

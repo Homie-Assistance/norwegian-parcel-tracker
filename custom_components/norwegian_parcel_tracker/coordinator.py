@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 import logging
 from typing import Any
@@ -297,91 +298,113 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             return
 
         try:
-            start = date.fromisoformat(str(eta)[:10])
+            eta_date = date.fromisoformat(str(eta)[:10])
         except ValueError:
             _LOGGER.debug("Cannot create calendar event; invalid ETA %s for %s", eta, parcel.tracking_number)
             return
 
-        end = start + timedelta(days=1)
-        unk = _t(self.hass, "calendar_unknown")
-        sender = parcel.sender_name or unk
-        summary = _t(self.hass, "calendar_summary", sender=sender)
-        pickup = parcel.pickup_name or _t(self.hass, "pickup_not_available")
-        latest = parcel.latest_event.description if parcel.latest_event else unk
-        location = parcel.latest_event.location if parcel.latest_event else unk
+        # Acquire a per-calendar asyncio.Lock to prevent slot-count races when many
+        # parcel coordinators refresh simultaneously at HA startup.
+        # Stored under a domain-specific sub-key to avoid polluting hass.data[DOMAIN].
+        locks = self.hass.data.setdefault(f"{DOMAIN}_calendar_locks", {})
+        if calendar_entity not in locks:
+            locks[calendar_entity] = asyncio.Lock()
 
-        description = "\n".join([
-            f"{_t(self.hass, 'calendar_field_tracking')}: {parcel.tracking_number}",
-            f"{_t(self.hass, 'calendar_field_sender')}: {parcel.sender_name or unk}",
-            f"{_t(self.hass, 'calendar_field_status')}: {parcel.status_description or parcel.current_status or unk}",
-            f"{_t(self.hass, 'calendar_field_latest_event')}: {latest}",
-            f"{_t(self.hass, 'calendar_field_last_seen')}: {location}",
-            f"{_t(self.hass, 'calendar_field_pickup')}: {pickup}",
-            f"{_t(self.hass, 'calendar_field_delivery_method')}: {parcel.delivery_method or parcel.product_name or unk}",
-            f"{_t(self.hass, 'calendar_field_weight')}: {parcel.weight_kg if parcel.weight_kg is not None else unk} kg",
-            f"{_t(self.hass, 'calendar_field_dimensions')}: {parcel.length_cm or unk} × {parcel.width_cm or unk} × {parcel.height_cm or unk} cm",
-        ])
+        async with locks[calendar_entity]:
+            slot = await self._async_count_calendar_slots(calendar_entity, eta_date, parcel.tracking_number)
+            if slot is None:
+                # This tracking number already has an event on this day; skip.
+                self._calendar_created_for = calendar_key
+                return
 
-        if await self._async_calendar_event_exists(calendar_entity, start, end, parcel.tracking_number, summary):
+            unk = _t(self.hass, "calendar_unknown")
+            sender = parcel.sender_name or unk
+            summary = _t(self.hass, "calendar_summary", sender=sender)
+            pickup = parcel.pickup_name or _t(self.hass, "pickup_not_available")
+            latest = parcel.latest_event.description if parcel.latest_event else unk
+            location = parcel.latest_event.location if parcel.latest_event else unk
+
+            description = "\n".join([
+                f"{_t(self.hass, 'calendar_field_tracking')}: {parcel.tracking_number}",
+                f"{_t(self.hass, 'calendar_field_sender')}: {parcel.sender_name or unk}",
+                f"{_t(self.hass, 'calendar_field_status')}: {parcel.status_description or parcel.current_status or unk}",
+                f"{_t(self.hass, 'calendar_field_latest_event')}: {latest}",
+                f"{_t(self.hass, 'calendar_field_last_seen')}: {location}",
+                f"{_t(self.hass, 'calendar_field_pickup')}: {pickup}",
+                f"{_t(self.hass, 'calendar_field_delivery_method')}: {parcel.delivery_method or parcel.product_name or unk}",
+                f"{_t(self.hass, 'calendar_field_weight')}: {parcel.weight_kg if parcel.weight_kg is not None else unk} kg",
+                f"{_t(self.hass, 'calendar_field_dimensions')}: {parcel.length_cm or unk} × {parcel.width_cm or unk} × {parcel.height_cm or unk} cm",
+            ])
+
+            # Timed event: 08:00 local + 30 min per existing NPT parcel on this day.
+            # Clamp so end_min never exceeds 23*60 (prevents "24:00:00" or later strings).
+            clamped_slot = min(slot, (23 * 60 - 8 * 60 - 60) // 30)  # max slot = 28
+            start_min = 8 * 60 + clamped_slot * 30
+            end_min   = start_min + 60
+            start_str = f"{eta_date.isoformat()} {start_min // 60:02d}:{start_min % 60:02d}:00"
+            end_str   = f"{eta_date.isoformat()} {end_min   // 60:02d}:{end_min   % 60:02d}:00"
+
+            try:
+                await self.hass.services.async_call(
+                    "calendar",
+                    "create_event",
+                    service_data={
+                        "summary": summary,
+                        "description": description,
+                        "start_date_time": start_str,
+                        "end_date_time": end_str,
+                    },
+                    target={"entity_id": calendar_entity},
+                    blocking=True,
+                )
+            except Exception:
+                _LOGGER.exception("Failed creating calendar event for %s in %s", parcel.tracking_number, calendar_entity)
+                return
+
             self._calendar_created_for = calendar_key
-            return
 
-        try:
-            await self.hass.services.async_call(
-                "calendar",
-                "create_event",
-                service_data={
-                    "summary": summary,
-                    "description": description,
-                    "start_date": start.isoformat(),
-                    "end_date": end.isoformat(),
-                },
-                target={"entity_id": calendar_entity},
-                blocking=True,
-            )
-        except Exception:
-            _LOGGER.exception("Failed creating calendar event for %s in %s", parcel.tracking_number, calendar_entity)
-            return
-
-        self._calendar_created_for = calendar_key
-
-    async def _async_calendar_event_exists(self, calendar_entity: str, start: date, end: date, tracking_number: str, summary: str) -> bool:
+    async def _async_count_calendar_slots(self, calendar_entity: str, day: date, tracking_number: str) -> int | None:
+        """
+        Returns the 0-based slot index for a new timed parcel event on `day`.
+        Counts existing NPT events by checking for tracking-field prefixes in descriptions.
+        Returns None if `tracking_number` already has an event on this day.
+        """
+        day_start = f"{day.isoformat()} 00:00:00"
+        day_end   = f"{(day + timedelta(days=1)).isoformat()} 00:00:00"
         try:
             response = await self.hass.services.async_call(
                 "calendar",
                 "get_events",
-                service_data={
-                    "start_date_time": f"{start.isoformat()} 00:00:00",
-                    "end_date_time": f"{end.isoformat()} 00:00:00",
-                },
+                service_data={"start_date_time": day_start, "end_date_time": day_end},
                 target={"entity_id": calendar_entity},
                 blocking=True,
                 return_response=True,
             )
         except Exception:
-            _LOGGER.debug("Could not check existing calendar events for %s", calendar_entity, exc_info=True)
-            return False
+            _LOGGER.warning("Could not query calendar slots for %s; defaulting to slot 0", calendar_entity, exc_info=True)
+            return 0
 
-        candidates = []
+        events: list = []
         if isinstance(response, dict):
-            entity_response = response.get(calendar_entity)
-            if isinstance(entity_response, dict):
-                candidates = entity_response.get("events") or []
-            elif isinstance(entity_response, list):
-                candidates = entity_response
+            entity_data = response.get(calendar_entity)
+            if isinstance(entity_data, dict):
+                events = entity_data.get("events") or []
+            elif isinstance(entity_data, list):
+                events = entity_data
             elif "events" in response:
-                candidates = response.get("events") or []
+                events = response.get("events") or []
 
-        for event in candidates:
+        slot = 0
+        for event in events:
             if not isinstance(event, dict):
                 continue
-            event_summary = str(event.get("summary") or event.get("title") or "")
-            event_description = str(event.get("description") or "")
-            if tracking_number in event_description:
-                return True
-            if event_summary == summary and tracking_number in event_description:
-                return True
-        return False
+            desc = str(event.get("description") or "")
+            if tracking_number in desc:
+                return None  # Already has an event on this day
+            # NPT events include "Sporingsnummer:" (NO) or "Tracking number:" (EN)
+            if "Sporingsnummer:" in desc or "Tracking number:" in desc:
+                slot += 1
+        return slot
 
     async def _async_send_notifications(self, parcel: ParcelData, options: dict) -> None:
         target = options.get(CONF_NOTIFY_TARGET)
