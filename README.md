@@ -183,6 +183,18 @@ The built-in panel uses semantic colors so the delivery state is visible at a gl
 
 Active statuses (in transit, ready for pickup, delayed) use solid, heavier route lines. Terminal statuses (delivered, cancelled, returned) use faded dashed lines.
 
+### Map toolbar
+
+A toolbar sits directly above every map (both the selected-parcel route map and the all-parcels overview). Buttons from left to right:
+
+| Button | Action |
+|---|---|
+| `+` | Zoom in |
+| `−` | Zoom out |
+| `⊛` | Fit map to the full route / all routes |
+| `📷` | Download a PNG screenshot of the map |
+| `⛶` | Expand the map to fill the browser window (press `Esc` or click `✕` to collapse) |
+
 ---
 
 ## Limitations

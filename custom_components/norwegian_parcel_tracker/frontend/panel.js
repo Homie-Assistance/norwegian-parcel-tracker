@@ -782,9 +782,21 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const noDataHtml = noDataParcels.length > 0
       ? `<div style="font-size:0.8em;opacity:0.5;margin-top:8px">${this._isNo ? "Ingen rutedata ennå:" : "No location data yet:"} ${noDataParcels.map((s) => this._escHtml(s.attributes.display_name || s.attributes.sender_name || s.attributes.tracking_number || s.entity_id)).join(", ")}</div>`
       : "";
+    const no = this._isNo;
     return `
       <div style="font-size:0.78em;opacity:0.55;padding:0 0 6px">${this._t("All parcel routes — click a dot to view details & route")}</div>
-      <div class="map-frame-overview"><div id="npt-overview-map" class="leaflet-map-overview"></div></div>
+      <div class="map-block">
+        <div class="map-controls">
+          <span class="map-ctrl-label">${no ? "Alle ruter" : "All routes"}</span>
+          <div style="flex:1"></div>
+          <button class="map-act-btn" data-map-action="zoomin"    title="${no ? "Zoom inn" : "Zoom in"}">+</button>
+          <button class="map-act-btn" data-map-action="zoomout"   title="${no ? "Zoom ut" : "Zoom out"}">&minus;</button>
+          <button class="map-act-btn" data-map-action="fit"       title="${no ? "Tilpass kart" : "Fit to routes"}">&#x229B;</button>
+          <button class="map-act-btn" data-map-action="screenshot" title="${no ? "Skjermbilde" : "Screenshot"}">&#x1F4F7;</button>
+          <button class="map-act-btn" data-map-action="expand"    title="${no ? "Fullvindu" : "Full window"}">&#x26F6;</button>
+        </div>
+        <div class="map-frame-overview"><div id="npt-overview-map" class="leaflet-map-overview"></div></div>
+      </div>
       ${noDataHtml}`;
   }
 
@@ -801,12 +813,21 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const btns = counts.map((c) =>
       `<button class="map-ctrl-btn${c.val === active ? " active" : ""}" data-stops="${c.val}">${c.label}</button>`
     ).join("");
+    const no = this._isNo;
     return `
-      <div class="map-controls">
-        <span class="map-ctrl-label">${this._isNo ? "Stopp:" : "Stops:"}</span>
-        ${btns}
-      </div>
-      <div class="map-frame"><div id="npt-route-map" class="leaflet-map-route"></div></div>`;
+      <div class="map-block">
+        <div class="map-controls">
+          <span class="map-ctrl-label">${no ? "Stopp:" : "Stops:"}</span>
+          ${btns}
+          <div style="flex:1"></div>
+          <button class="map-act-btn" data-map-action="zoomin"    title="${no ? "Zoom inn" : "Zoom in"}">+</button>
+          <button class="map-act-btn" data-map-action="zoomout"   title="${no ? "Zoom ut" : "Zoom out"}">&minus;</button>
+          <button class="map-act-btn" data-map-action="fit"       title="${no ? "Tilpass kart" : "Fit to route"}">&#x229B;</button>
+          <button class="map-act-btn" data-map-action="screenshot" title="${no ? "Skjermbilde" : "Screenshot"}">&#x1F4F7;</button>
+          <button class="map-act-btn" data-map-action="expand"    title="${no ? "Fullvindu" : "Full window"}">&#x26F6;</button>
+        </div>
+        <div class="map-frame"><div id="npt-route-map" class="leaflet-map-route"></div></div>
+      </div>`;
   }
 
   _render() {
@@ -819,6 +840,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const rows = this._buildParcelRows();
 
     if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
+    if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
 
     this._shadow.innerHTML = `
       <link rel="stylesheet" href="${_LEAFLET_CSS}">
@@ -860,10 +882,18 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .map-ctrl-btn { background:transparent; border:1px solid var(--divider-color,#444); color:var(--primary-text-color,#eee); border-radius:4px; padding:3px 9px; cursor:pointer; font-size:0.78em; font-family:inherit; }
         .map-ctrl-btn:hover { background:rgba(255,255,255,0.07); }
         .map-ctrl-btn.active { background:var(--primary-color,#1976d2); border-color:transparent; color:#fff; }
+        .map-act-btn { background:transparent; border:1px solid var(--divider-color,#444); color:var(--primary-text-color,#eee); border-radius:4px; padding:3px 7px; cursor:pointer; font-size:0.82em; font-family:inherit; line-height:1; }
+        .map-act-btn:hover { background:rgba(255,255,255,0.07); }
+        .map-controls { flex-wrap:wrap; }
+        .map-block { position:relative; }
+        .map-block.map-expanded { position:fixed; inset:0; z-index:9999; display:flex; flex-direction:column; background:var(--primary-background-color,#111); }
+        .map-block.map-expanded .map-controls { flex-shrink:0; padding:6px 10px; border-bottom:1px solid var(--divider-color,#333); }
+        .map-block.map-expanded .map-frame, .map-block.map-expanded .map-frame-overview { flex:1; min-height:0; border:none; border-radius:0; box-shadow:none; margin:0; display:flex; flex-direction:column; }
+        .map-block.map-expanded .leaflet-map-route, .map-block.map-expanded .leaflet-map-overview { flex:1; height:auto !important; min-height:0; }
         .map-frame { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; margin-bottom: 12px; background: #c8a96e; position: relative; }
         .map-frame-overview { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; background: #c8a96e; }
         .leaflet-map-route { height: 280px; width: 100%; display: block; }
-        .leaflet-map-overview { height: calc(100vh - 160px); min-height: 300px; width: 100%; display: block; }
+        .leaflet-map-overview { height: calc(100vh - 198px); min-height: 260px; width: 100%; display: block; }
         .leaflet-map-route .leaflet-tile-pane,
         .leaflet-map-overview .leaflet-tile-pane { filter: sepia(0.55) contrast(0.92) brightness(1.06) saturate(0.5) hue-rotate(6deg); }
         .leaflet-container { background: #c8a96e !important; }
@@ -984,9 +1014,24 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         this._setSetting("npt-map-stop-count", btn.dataset.stops);
         this._shadow.querySelectorAll(".map-ctrl-btn[data-stops]").forEach((b) =>
           b.classList.toggle("active", b === btn));
+        const wasExpanded = this._shadow.querySelector(".map-block.map-expanded") !== null;
         if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
         const selState = this._selected ? this._parcels.find((s) => s.entity_id === this._selected) : null;
-        if (selState) this._initRouteMap(selState).catch(() => {});
+        if (selState) this._initRouteMap(selState).then(() => {
+          if (wasExpanded && this._leafletMap) this._leafletMap.scrollWheelZoom.enable();
+        }).catch(() => {});
+      });
+    });
+
+    // Map action toolbar (zoom, fit, screenshot, expand)
+    this._shadow.querySelectorAll("[data-map-action]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const a = btn.dataset.mapAction;
+        if (a === "zoomin")     this._leafletMap?.zoomIn();
+        if (a === "zoomout")    this._leafletMap?.zoomOut();
+        if (a === "fit")        { const m = this._leafletMap; if (m?._nptFitBounds) m.fitBounds(m._nptFitBounds, { padding: [30, 30] }); }
+        if (a === "screenshot") this._takeMapScreenshot();
+        if (a === "expand")     this._toggleMapExpanded();
       });
     });
 
@@ -1029,6 +1074,12 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   }
 
   connectedCallback() { this._render(); }
+
+  /** Clean up Leaflet map and global event listeners when element is removed from the DOM. */
+  disconnectedCallback() {
+    if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
+    if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
+  }
 
   async _ensureLeaflet() {
     if (window.L && window.L.map) return;
@@ -1088,9 +1139,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const visible = ordered.slice(-maxStops); // most-recent N stops, oldest-first
     const latLngs = visible.map((c) => [c.lat, c.lng]);
 
-    const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
-    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abc", maxZoom: 17 }).addTo(map);
-    map.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40] });
+    const map = L.map(mapDiv, { zoomControl: false, scrollWheelZoom: false, attributionControl: true });
+    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abc", maxZoom: 17, crossOrigin: "anonymous" }).addTo(map);
+    const fitBounds = L.latLngBounds(latLngs);
+    map.fitBounds(fitBounds, { padding: [40, 40] });
+    map._nptFitBounds = fitBounds;
     this._leafletMap = map;
 
     const statusKey   = this._parcelStatusColor(state);
@@ -1145,9 +1198,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const L = window.L;
 
     const allLatLngs = parcelRoutes.flatMap((p) => p.coords.map((c) => [c.lat, c.lng]));
-    const map = L.map(mapDiv, { zoomControl: true, scrollWheelZoom: false });
-    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abc", maxZoom: 17 }).addTo(map);
-    map.fitBounds(L.latLngBounds(allLatLngs), { padding: [24, 24] });
+    const map = L.map(mapDiv, { zoomControl: false, scrollWheelZoom: false });
+    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abc", maxZoom: 17, crossOrigin: "anonymous" }).addTo(map);
+    const fitBounds = L.latLngBounds(allLatLngs);
+    map.fitBounds(fitBounds, { padding: [24, 24] });
+    map._nptFitBounds = fitBounds;
     this._leafletMap = map;
 
     parcelRoutes.forEach((p) => {
@@ -1185,6 +1240,112 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .on("click", () => this._selectParcel(p.entityId))
         .addTo(map);
     });
+  }
+
+  /** Download a PNG of the current route or overview map using native canvas compositing. */
+  async _takeMapScreenshot() {
+    const map = this._leafletMap;
+    if (!map) return;
+    const container = map.getContainer();
+    const dpr = window.devicePixelRatio || 1;
+    const w = container.offsetWidth;
+    const h = container.offsetHeight;
+    const out = document.createElement("canvas");
+    out.width  = Math.round(w * dpr);
+    out.height = Math.round(h * dpr);
+    const ctx = out.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = "#c8a96e";
+    ctx.fillRect(0, 0, w, h);
+    const cRect = container.getBoundingClientRect();
+    // Tiles — read the live CSS filter so the PNG matches the screen exactly
+    const tilePaneFilter = getComputedStyle(container.querySelector(".leaflet-tile-pane")).filter;
+    ctx.filter = tilePaneFilter && tilePaneFilter !== "none" ? tilePaneFilter : "none";
+    container.querySelectorAll(".leaflet-tile-pane img, .leaflet-tile-pane canvas").forEach((el) => {
+      if (el.tagName === "IMG" && !el.complete) return;
+      const r = el.getBoundingClientRect();
+      try { ctx.drawImage(el, r.left - cRect.left, r.top - cRect.top, r.width, r.height); } catch (e) {}
+    });
+    ctx.filter = "none";
+    // SVG overlay — strip Leaflet's inline transform so drawImage positions it correctly via getBoundingClientRect
+    const svg = container.querySelector(".leaflet-overlay-pane svg");
+    if (svg) {
+      const svgClone = svg.cloneNode(true);
+      svgClone.style.transform = "";
+      const svgRect = svg.getBoundingClientRect();
+      const blob = new Blob([new XMLSerializer().serializeToString(svgClone)], { type: "image/svg+xml" });
+      const url  = URL.createObjectURL(blob);
+      await new Promise((res) => {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, svgRect.left - cRect.left, svgRect.top - cRect.top, svgRect.width, svgRect.height);
+          URL.revokeObjectURL(url);
+          res();
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); res(); };
+        img.src = url;
+      });
+    }
+    // Current-position markers
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    container.querySelectorAll(".npt-plane-wrap").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left - cRect.left + r.width / 2;
+      const cy = r.top  - cRect.top  + r.height / 2;
+      const size = Math.max(16, Math.round(r.height * 0.85));
+      ctx.font = `${size}px sans-serif`;
+      try { ctx.fillText(el.textContent.trim() || "📦", cx, cy); } catch (e) {}
+    });
+    // Attribution strip (CC-BY-SA requirement for OpenTopoMap tiles)
+    const attrText = container.querySelector(".leaflet-control-attribution")?.textContent?.trim();
+    if (attrText) {
+      const pad = 4, fh = 10;
+      ctx.font = `${fh}px sans-serif`;
+      const tw = ctx.measureText(attrText).width;
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.fillRect(w - tw - pad * 2, h - fh - pad * 2, tw + pad * 2, fh + pad * 2);
+      ctx.fillStyle = "#111";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(attrText, w - pad, h - pad);
+    }
+    try {
+      out.toBlob((blob) => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "parcel-map.png";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 2000);
+      });
+    } catch (e) {
+      console.warn("NPT map screenshot blocked by browser:", e);
+    }
+  }
+
+  /** Toggle the map block (toolbar + frame) between normal size and a fixed full-viewport overlay. */
+  _toggleMapExpanded() {
+    const map = this._leafletMap;
+    if (!map) return;
+    const block = map.getContainer().closest(".map-block");
+    if (!block) return;
+    const expanding = !block.classList.contains("map-expanded");
+    block.classList.toggle("map-expanded", expanding);
+    // Flip the ⛶ button label to ✕ (and back)
+    block.querySelectorAll("[data-map-action='expand']").forEach((btn) => {
+      btn.textContent = expanding ? "✕" : "⛶";
+      btn.title = expanding ? (this._isNo ? "Lukk" : "Close") : (this._isNo ? "Fullvindu" : "Full window");
+    });
+    if (expanding) {
+      map.scrollWheelZoom.enable();
+      this._mapEscHandler = (e) => { if (e.key === "Escape") this._toggleMapExpanded(); };
+      document.addEventListener("keydown", this._mapEscHandler);
+    } else {
+      map.scrollWheelZoom.disable();
+      if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
+    }
+    requestAnimationFrame(() => map.invalidateSize());
   }
 }
 
