@@ -236,16 +236,24 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   _statusLineColor(key) {
     const MAP = {
-      "delivered":     "#2e7d32",
-      "pickup-ready":  "#f57f17",
-      "parked":        "#1565c0",
-      "delayed":       "#e65100",
-      "possibly-lost": "#bf360c",
-      "lost":          "#b71c1c",
-      "cancelled":     "#455a64",
-      "returned":      "#455a64",
+      "in-transit":    "#2196f3",  // vivid blue  — actively moving
+      "pickup-ready":  "#ff9800",  // amber        — human action required
+      "delivered":     "#9e9e9e",  // mid grey     — done, visually recedes
+      "parked":        "#3f51b5",  // indigo       — held/waiting
+      "delayed":       "#ff5722",  // deep orange  — retry needed
+      "possibly-lost": "#e53935",  // red          — warning
+      "lost":          "#b71c1c",  // dark red     — alarm
+      "cancelled":     "#607d8b",  // blue-grey    — dead/inactive
+      "returned":      "#9c27b0",  // purple       — reversed flow
     };
-    return MAP[key] || "#4a2800";
+    return MAP[key] || "#2196f3";
+  }
+
+  // Returns a Leaflet dashArray string for terminal/warning states; null for active (solid line).
+  _statusLineDash(key) {
+    if (["delivered", "cancelled", "returned"].includes(key)) return "6 10";
+    if (["lost", "possibly-lost"].includes(key))              return "4 4";
+    return null;
   }
 
   _statusMarkerEmoji(key, customIcon) {
@@ -854,8 +862,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .map-ctrl-btn.active { background:var(--primary-color,#1976d2); border-color:transparent; color:#fff; }
         .map-frame { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; margin-bottom: 12px; background: #c8a96e; position: relative; }
         .map-frame-overview { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; background: #c8a96e; }
-        .leaflet-map-route { height: 280px; width: 100%; display: block; filter: sepia(0.75) contrast(0.9) brightness(1.08) saturate(0.45) hue-rotate(8deg); }
-        .leaflet-map-overview { height: calc(100vh - 160px); min-height: 300px; width: 100%; display: block; filter: sepia(0.75) contrast(0.9) brightness(1.08) saturate(0.45) hue-rotate(8deg); }
+        .leaflet-map-route { height: 280px; width: 100%; display: block; }
+        .leaflet-map-overview { height: calc(100vh - 160px); min-height: 300px; width: 100%; display: block; }
+        .leaflet-map-route .leaflet-tile-pane,
+        .leaflet-map-overview .leaflet-tile-pane { filter: sepia(0.55) contrast(0.92) brightness(1.06) saturate(0.5) hue-rotate(6deg); }
         .leaflet-container { background: #c8a96e !important; }
         .leaflet-tile-pane { z-index: 2 !important; }
         .leaflet-overlay-pane { z-index: 4 !important; }
@@ -907,20 +917,21 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .no-parcels { padding: 32px; text-align: center; opacity: 0.5; }
         table { table-layout: fixed; width: 100%; }
         .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .parcel-row.status-delivered    { background: rgba(46,125,50,0.13); }
-        .parcel-row.status-pickup-ready { animation: npt-blink-pickup 1.6s ease-in-out infinite; }
-        .parcel-row.status-parked       { background: rgba(21,101,192,0.11); }
-        .parcel-row.status-delayed      { background: rgba(230,81,0,0.12); }
-        .parcel-row.status-possibly-lost{ background: rgba(191,54,12,0.13); }
-        .parcel-row.status-lost         { background: rgba(183,28,28,0.16); }
-        .parcel-row.status-cancelled,
-        .parcel-row.status-returned     { background: rgba(69,90,100,0.12); }
+        .parcel-row.status-in-transit    { box-shadow: inset 4px 0 0 #2196f3; }
+        .parcel-row.status-delivered     { box-shadow: inset 4px 0 0 #9e9e9e; }
+        .parcel-row.status-pickup-ready  { box-shadow: inset 4px 0 0 #ff9800; animation: npt-blink-pickup 1.6s ease-in-out infinite; }
+        .parcel-row.status-parked        { box-shadow: inset 4px 0 0 #3f51b5; }
+        .parcel-row.status-delayed       { box-shadow: inset 4px 0 0 #ff5722; }
+        .parcel-row.status-possibly-lost { box-shadow: inset 4px 0 0 #e53935; }
+        .parcel-row.status-lost          { box-shadow: inset 4px 0 0 #b71c1c; background: rgba(183,28,28,0.10); }
+        .parcel-row.status-cancelled     { box-shadow: inset 4px 0 0 #607d8b; }
+        .parcel-row.status-returned      { box-shadow: inset 4px 0 0 #9c27b0; }
         @keyframes npt-blink-pickup {
-          0%,100% { background: rgba(245,127,23,0.10); }
-          50%     { background: rgba(245,127,23,0.32); }
+          0%,100% { background: rgba(255,152,0,0.07); }
+          50%     { background: rgba(255,152,0,0.25); }
         }
         @media (prefers-reduced-motion: reduce) {
-          .parcel-row.status-pickup-ready { animation: none; background: rgba(245,127,23,0.18); }
+          .parcel-row.status-pickup-ready { animation: none; background: rgba(255,152,0,0.14); }
         }
       </style>
 
@@ -1086,7 +1097,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const lineColor   = this._statusLineColor(statusKey);
     const markerEmoji = this._statusMarkerEmoji(statusKey, state.attributes.npt_icon || "");
 
-    L.polyline(latLngs, { color: lineColor, weight: 3, opacity: 0.88, dashArray: "8 5" }).addTo(map);
+    const dash = this._statusLineDash(statusKey);
+    const activeStatus = ["in-transit", "pickup-ready", "delayed"].includes(statusKey);
+    const lineOpts = { color: lineColor, weight: activeStatus ? 3.5 : 2.5, opacity: activeStatus ? 0.9 : 0.7 };
+    if (dash) lineOpts.dashArray = dash;
+    L.polyline(latLngs, lineOpts).addTo(map);
 
     visible.slice(0, -1).forEach((c) => {
       const tip = `${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`;
@@ -1116,16 +1131,14 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   async _initOverviewMap(parcels) {
     const mapDiv = this._shadow.getElementById("npt-overview-map");
     if (!mapDiv) return;
-    const COLORS = ["#4a2800","#7a2800","#2a4800","#6a4800","#4a006a","#006a4a","#6a006a","#8d6e63"];
     const parcelRoutes = parcels
       .filter((s) => s.attributes.route_coords && s.attributes.route_coords.length > 0)
-      .map((s, i) => ({
+      .map((s) => ({
         entityId: s.entity_id,
         name: (s.attributes.display_name || s.attributes.sender_name || s.attributes.tracking_number || "").slice(0, 24),
         icon: s.attributes.npt_icon || "",
-        delivered: /delivered|levert|hentet/i.test(s.state || ""),
+        statusKey: this._parcelStatusColor(s),
         coords: s.attributes.route_coords,
-        color: COLORS[i % COLORS.length],
       }));
     if (parcelRoutes.length === 0) return;
     try { await this._ensureLeaflet(); } catch (e) { return; }
@@ -1140,17 +1153,21 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     parcelRoutes.forEach((p) => {
       const ordered = [...p.coords].reverse();
       const latLngs = ordered.map((c) => [c.lat, c.lng]);
-      L.polyline(latLngs, { color: p.color, weight: 2.5, opacity: 0.85, dashArray: "8 5" }).addTo(map);
+      const pColor = this._statusLineColor(p.statusKey);
+      const pDash  = this._statusLineDash(p.statusKey);
+      const pActive = ["in-transit", "pickup-ready", "delayed"].includes(p.statusKey);
+      const pOpts = { color: pColor, weight: pActive ? 3 : 2, opacity: pActive ? 0.88 : 0.6 };
+      if (pDash) pOpts.dashArray = pDash;
+      L.polyline(latLngs, pOpts).addTo(map);
 
       ordered.slice(0, -1).forEach((c) => {
-        L.circleMarker([c.lat, c.lng], { radius: 4, color: p.color, fillColor: p.color, fillOpacity: 0.5, weight: 1 })
+        L.circleMarker([c.lat, c.lng], { radius: 4, color: pColor, fillColor: pColor, fillOpacity: 0.5, weight: 1 })
           .bindTooltip(`${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`)
           .addTo(map);
       });
 
       const cur = p.coords[0];
-      const isEmoji = p.icon && !p.icon.startsWith("mdi:") && !p.icon.startsWith("http");
-      const label = isEmoji ? p.icon : (p.delivered ? "✅" : "✈️");
+      const label = this._statusMarkerEmoji(p.statusKey, p.icon);
       let bearing = 0;
       if (p.coords.length >= 2) {
         const dLat = p.coords[0].lat - p.coords[1].lat;
