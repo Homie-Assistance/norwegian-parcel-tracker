@@ -113,6 +113,22 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       });
     });
     if (this._filterText) this._filterParcels(this._filterText);
+
+    // Also refresh the detail pane text (status, events, ETA) when a parcel is selected,
+    // without touching the Leaflet map.  This is what makes the Refresh button visibly work.
+    if (this._selected) {
+      const selected = this._parcels.find((s) => s.entity_id === this._selected);
+      const pane = this._shadow.querySelector(".detail-pane");
+      if (selected && pane) {
+        const tmp = document.createElement("div");
+        tmp.innerHTML = this._renderDetailPane(selected);
+        const newPane = tmp.firstElementChild;
+        if (newPane) {
+          pane.replaceWith(newPane);
+          this._attachDetailPaneListeners(selected);
+        }
+      }
+    }
   }
 
   set panel(panel) {
@@ -1058,31 +1074,29 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       row.addEventListener("click", () => this._selectParcel(row.dataset.id));
     });
 
-    if (selected) {
-      const tn = selected.attributes.tracking_number || selected.entity_id;
-
-      this._shadow.getElementById("btn-rename")?.addEventListener("click", () =>
-        this._showRenameDialog(tn, selected.attributes.display_name || selected.attributes.sender_name || ""));
-
-      this._shadow.getElementById("btn-add-note")?.addEventListener("click", () =>
-        this._showAddNoteDialog(tn));
-
-      this._shadow.getElementById("btn-icon")?.addEventListener("click", () =>
-        this._showIconDialog(tn, selected.attributes.npt_icon || ""));
-
-      this._shadow.getElementById("btn-refresh")?.addEventListener("click", () =>
-        this._callService("norwegian_parcel_tracker", "refresh", { tracking_number: tn }));
-
-      this._shadow.querySelectorAll(".note-delete").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const idx = parseInt(btn.dataset.idx, 10);
-          this._callService("norwegian_parcel_tracker", "delete_note", { tracking_number: tn, idx });
-        });
-      });
-    }
+    if (selected) this._attachDetailPaneListeners(selected);
 
     this._initLeafletMaps().catch(() => {});
+  }
+
+  /** Wire click listeners on the detail pane buttons (rename, icon, refresh, notes). */
+  _attachDetailPaneListeners(selected) {
+    const tn = selected.attributes.tracking_number || selected.entity_id;
+    this._shadow.getElementById("btn-rename")?.addEventListener("click", () =>
+      this._showRenameDialog(tn, selected.attributes.display_name || selected.attributes.sender_name || ""));
+    this._shadow.getElementById("btn-add-note")?.addEventListener("click", () =>
+      this._showAddNoteDialog(tn));
+    this._shadow.getElementById("btn-icon")?.addEventListener("click", () =>
+      this._showIconDialog(tn, selected.attributes.npt_icon || ""));
+    this._shadow.getElementById("btn-refresh")?.addEventListener("click", () =>
+      this._callService("norwegian_parcel_tracker", "refresh", { tracking_number: tn }));
+    this._shadow.querySelectorAll(".note-delete").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx, 10);
+        this._callService("norwegian_parcel_tracker", "delete_note", { tracking_number: tn, idx });
+      });
+    });
   }
 
   connectedCallback() { this._render(); }
