@@ -245,6 +245,7 @@ Planned features in rough priority order:
 | **Custom route map card** | Planned | Companion Lovelace card with a Leaflet.js map showing the full delivery route — built on top of the location history above. |
 | **Full event history storage** | Planned | Persist all tracking events (including geocoded coordinates) in HA `.storage/` for map routes and future delivery-time statistics. |
 | **AliExpress / Cainiao tracking** | Released (v2.2.0) | Direct call to Cainiao's public endpoint. Supports LP…CN, LX…CN, RX…CN, and AP… number formats. No sign-up or API key required. |
+| **Route map — transit animation** | Released (v2.3.0) | For in-transit parcels with a recent stop, the current-position marker animates from the previous stop to the confirmed last stop when the map opens, giving a visual sense of movement without inventing a position. |
 | **PostNord support** | Blocked | `feature/postnord` branch exists. Blocked on obtaining a PostNord Partner API agreement. |
 | **Delivery statistics** | Future | Charts for typical delivery times per carrier, based on accumulated history. |
 

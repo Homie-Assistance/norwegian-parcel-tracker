@@ -48,6 +48,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._filterText = "";
     this._shadow = this.attachShadow({ mode: "open" });
     this._leafletMap = null;
+    this._animTimeout = null;
     const nav = (navigator.language || "").toLowerCase();
     const navIsNo = nav.startsWith("nb") || nav.startsWith("no") || nav.startsWith("nn");
     let savedLang = "auto";
@@ -322,8 +323,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   }
 
   _showSettingsDialog() {
-    const engine  = this._searchEngine();
-    const zoom    = this._mapDefaultZoom();
+    const engine    = this._searchEngine();
+    const zoom      = this._mapDefaultZoom();
+    const transitAnim = this._getSetting("npt-transit-anim", "on");
     const posLost = this._possiblyLostDays();
     const lost    = this._lostDays();
     const lang    = this._getSetting("npt-language", "auto");
@@ -352,6 +354,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       _row(no ? "Hele ruten" : "Full route", "all", "npt-zoom", zoom === "all"),
     ].join(""));
 
+    const animSection = _sec(no ? "Kart — glideanimasjon ved innlasting" : "Map — slide-in animation on load", [
+      _row(no ? "På — marker glir fra forrige til siste stopp" : "On — marker slides from previous to current stop", "on",  "npt-anim", transitAnim === "on"),
+      _row(no ? "Av" : "Off", "off", "npt-anim", transitAnim === "off"),
+    ].join(""));
+
     const threshSection = _sec(no ? "Statusterskel (dager uten oppdatering)" : "Status thresholds (days without update)",
       `<div style="display:flex;flex-direction:column;gap:8px">
          <div style="display:flex;align-items:center;gap:10px">
@@ -376,7 +383,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const overlay = this._showModal(`
       <div class="npt-dialog" style="max-height:82vh;overflow-y:auto;max-width:400px">
         <h3>⚙️ ${no ? "Innstillinger" : "Settings"}</h3>
-        ${langSection}${zoomSection}${threshSection}${engineSection}
+        ${langSection}${zoomSection}${animSection}${threshSection}${engineSection}
         <div class="npt-actions">
           <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
           <button class="npt-btn npt-btn-primary" id="npt-settings-save">${this._t("Save")}</button>
@@ -390,6 +397,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
       const chosenZoom = overlay.querySelector("input[name='npt-zoom']:checked")?.value;
       if (chosenZoom) this._setSetting("npt-map-zoom-mode", chosenZoom);
+
+      const chosenAnim = overlay.querySelector("input[name='npt-anim']:checked")?.value;
+      if (chosenAnim) this._setSetting("npt-transit-anim", chosenAnim);
 
       const posLostVal = parseInt(overlay.querySelector("#npt-possibly-lost")?.value || "3", 10);
       const lostVal    = parseInt(overlay.querySelector("#npt-lost")?.value || "5", 10);
@@ -841,6 +851,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
     if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
+    if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
 
     this._shadow.innerHTML = `
       <link rel="stylesheet" href="${_LEAFLET_CSS}">
@@ -1016,6 +1027,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           b.classList.toggle("active", b === btn));
         const wasExpanded = this._shadow.querySelector(".map-block.map-expanded") !== null;
         if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
+        if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
         const selState = this._selected ? this._parcels.find((s) => s.entity_id === this._selected) : null;
         if (selState) this._initRouteMap(selState).then(() => {
           if (wasExpanded && this._leafletMap) this._leafletMap.scrollWheelZoom.enable();
@@ -1079,6 +1091,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   disconnectedCallback() {
     if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
     if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
+    if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
   }
 
   async _ensureLeaflet() {
@@ -1176,9 +1189,36 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       iconSize: [30, 30],
       iconAnchor: [15, 15],
     });
-    L.marker([cur.lat, cur.lng], { icon: planeIcon })
+
+    // For in-transit parcels with a recent previous stop, animate the marker
+    // from coords[1] → coords[0] using an inline CSS transition.  The marker
+    // always ends at the confirmed last stop — no invented position.
+    // Only "in-transit" animates; pickup-ready and delayed stay static.
+    const animEnabled = this._getSetting("npt-transit-anim", "on") === "on";
+    const recentMs = 24 * 3600 * 1000;
+    const lastDate = cur.date_iso ? new Date(cur.date_iso).getTime() : 0;
+    const shouldAnimate = animEnabled && statusKey === "in-transit" &&
+                          coords.length >= 2 && (Date.now() - lastDate) < recentMs;
+
+    const startLatLng = shouldAnimate ? [coords[1].lat, coords[1].lng] : [cur.lat, cur.lng];
+    const marker = L.marker(startLatLng, { icon: planeIcon })
       .bindTooltip(`${(cur.date_iso || "").slice(0, 16).replace("T", " ")} — ${cur.description || ""}`)
       .addTo(map);
+
+    if (shouldAnimate) {
+      // Set transition inline (shadow DOM; document.head styles don't reach here).
+      // A second timer clears it so zooming doesn't re-trigger the slide.
+      this._animTimeout = setTimeout(() => {
+        const el = marker.getElement();
+        if (!el) { this._animTimeout = null; return; }
+        el.style.transition = "transform 4s ease-in-out";
+        marker.setLatLng([cur.lat, cur.lng]);
+        this._animTimeout = setTimeout(() => {
+          el.style.transition = "";
+          this._animTimeout = null;
+        }, 4100);
+      }, 50);
+    }
   }
 
   async _initOverviewMap(parcels) {
