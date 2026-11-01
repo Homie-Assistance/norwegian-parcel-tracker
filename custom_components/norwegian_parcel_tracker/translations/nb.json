@@ -9,7 +9,7 @@
       },
       "add_parcel": {
         "title": "Legg til pakke",
-        "description": "Skriv inn et sporingsnummer fra Posten/Bring eller Helthjem. Globale innstillinger (språk, leveringskontekster) konfigureres via Innstillinger-oppføringen.",
+        "description": "Skriv inn et sporingsnummer fra Posten/Bring, Helthjem eller AliExpress/Cainiao. Globale innstillinger (språk, leveringskontekster) konfigureres via Innstillinger-oppføringen.",
         "data": {
           "tracking_number": "Sporingsnummer",
           "name": "Visningsnavn"
@@ -81,7 +81,8 @@
     "error": {
       "cannot_connect": "Kunne ikke hente sporingsinformasjon fra Posten/Bring",
       "helthjem_cannot_connect": "Kunne ikke hente sporingsinformasjon fra Helthjem",
-      "unsupported_tracking_number": "Ugyldig eller ikke-støttet sporingsnummer. Denne integrasjonen støtter kun Bring, Helthjem og Posten. Støtte for flere leverandører er planlagt og kommer i nær fremtid.",
+      "unsupported_tracking_number": "Ugyldig eller ikke-støttet sporingsnummer. Integrasjonen støtter Bring, Helthjem, Posten og AliExpress/Cainiao (LP…/LX…/RX…/AP…-numre).",
+      "cainiao_cannot_connect": "Kunne ikke hente sporingsdata fra Cainiao. Kontroller internettilkoblingen.",
       "unknown": "Uventet feil",
       "cannot_connect_imap": "Kunne ikke koble til IMAP-serveren. Kontroller serveradressen og porten.",
       "invalid_auth": "Innlogging mislyktes. Kontroller brukernavn og passord (bruk app-passord for Gmail/Microsoft).",

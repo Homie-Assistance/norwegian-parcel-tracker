@@ -38,6 +38,8 @@ _STORAGE_VERSION = 1
 
 # Tracking number extraction patterns (applied against uppercased text)
 _PATTERNS: list[re.Pattern] = [
+    # AliExpress / Cainiao (LP, LX, RX, AP prefix + 9–18 digits + optional 2-letter country)
+    re.compile(r'\b((?:LP|LX|RX|AP)\d{9,18}(?:[A-Z]{2})?)\b'),
     # Bring/Posten proprietary letter prefixes — unambiguous
     re.compile(r'\b(JD\d{10,18})\b'),
     re.compile(r'\b(JVNO\d{6,14})\b'),

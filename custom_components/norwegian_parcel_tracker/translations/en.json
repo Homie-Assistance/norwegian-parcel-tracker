@@ -9,7 +9,7 @@
       },
       "add_parcel": {
         "title": "Add parcel",
-        "description": "Enter a tracking number from Posten/Bring or Helthjem. Global settings (language, delivery contexts) are configured via the Settings entry.",
+        "description": "Enter a tracking number from Posten/Bring, Helthjem, or AliExpress/Cainiao (LP…/LX…/RX…/AP… numbers). Global settings (language, delivery contexts) are configured via the Settings entry.",
         "data": {
           "tracking_number": "Tracking number",
           "name": "Display name"
@@ -81,7 +81,8 @@
     "error": {
       "cannot_connect": "Could not fetch tracking data from Posten/Bring",
       "helthjem_cannot_connect": "Could not fetch tracking data from Helthjem",
-      "unsupported_tracking_number": "Invalid or unsupported tracking number. This integration only supports Bring, Helthjem, and Posten. Support for more delivery companies is planned and coming in the near future.",
+      "unsupported_tracking_number": "Invalid or unsupported tracking number. This integration supports Bring, Helthjem, Posten, and AliExpress/Cainiao (LP…/LX…/RX…/AP… numbers).",
+      "cainiao_cannot_connect": "Could not fetch tracking data from Cainiao. Check your internet connection.",
       "unknown": "Unexpected error",
       "cannot_connect_imap": "Could not connect to the IMAP server. Check the server address and port.",
       "invalid_auth": "Login failed. Check your username and password (use an app password for Gmail/Microsoft).",

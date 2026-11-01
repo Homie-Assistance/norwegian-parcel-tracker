@@ -13,10 +13,16 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError, ParcelData
+from .api import (
+    CaiNiaoTrackingClient, CaiNiaoTrackingError,
+    HelthjemTrackingClient, HelthjemTrackingError,
+    PostenTrackingClient, PostenTrackingError,
+    ParcelData,
+)
 from .event_history import DeliveryStatsStore, ParcelEventHistory
 from .geocoder import NominatimGeocoder
 from .const import (
+    CARRIER_CAINIAO,
     CARRIER_HELTHJEM,
     CARRIER_POSTEN,
     CONF_AUTO_DELETE_DELIVERED_HOURS,
@@ -61,6 +67,8 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         session: ClientSession = async_get_clientsession(hass)
         if self._carrier == CARRIER_HELTHJEM:
             self.client = HelthjemTrackingClient(session)
+        elif self._carrier == CARRIER_CAINIAO:
+            self.client = CaiNiaoTrackingClient(session)
         else:
             self.client = PostenTrackingClient(session)
         self._last_event_key: tuple[str | None, str | None] | None = None
@@ -138,6 +146,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
 
         return result
 
+
     def _get_effective_language(self) -> str:
         """Return the language for Posten data, falling back to the HA system language."""
         global_opts = self._get_global_options()
@@ -149,7 +158,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
     async def _async_update_data(self) -> ParcelData:
         try:
             parcel = await self.client.async_get_tracking(self.tracking_number)
-        except (PostenTrackingError, HelthjemTrackingError) as err:
+        except (PostenTrackingError, HelthjemTrackingError, CaiNiaoTrackingError) as err:
             raise UpdateFailed(str(err)) from err
         finally:
             if self._refreshing:

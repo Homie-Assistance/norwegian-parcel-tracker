@@ -11,8 +11,13 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import HelthjemTrackingClient, HelthjemTrackingError, PostenTrackingClient, PostenTrackingError
+from .api import (
+    CaiNiaoTrackingClient, CaiNiaoTrackingError,
+    HelthjemTrackingClient, HelthjemTrackingError,
+    PostenTrackingClient, PostenTrackingError,
+)
 from .const import (
+    CARRIER_CAINIAO,
     CARRIER_HELTHJEM,
     CARRIER_POSTEN,
     CONF_AUTO_DELETE_DELIVERED_HOURS,
@@ -226,16 +231,25 @@ async def _async_validate_imap(hass: Any, user_input: dict[str, Any]) -> dict[st
 
 
 def _guess_carrier_from_format(tracking_number: str) -> str | None:
-    """Return 'posten' only for tracking-number formats that are distinctively Bring/Posten.
+    """Return the carrier name for tracking-number formats that can be identified unambiguously.
 
     Deliberately conservative: the international postal format (RR123456789NO) is shared
     by UPU members including PostNord, so it returns None rather than a confident but wrong
-    carrier name.  Only Bring's proprietary JD/JVNO letter prefixes are truly unambiguous.
+    carrier name.  Only Bring's proprietary JD/JVNO letter prefixes and Cainiao's LP/LX/RX/AP
+    prefixes are truly unambiguous.
     """
     tn = re.sub(r"\s", "", tracking_number).upper()
     if re.match(r"^(JD\d|JVNO\d|JV\d)", tn):
         return "posten"
+    # AliExpress / Cainiao: AP (no suffix) or LP/LX/RX with mandatory CN suffix.
+    # AP numbers are Global Cainiao Shipping with no country suffix.
+    # LP/LX/RX require CN because RX…NO etc. are UPU S10 postal numbers, not Cainiao.
+    if re.match(r"^AP\d{9,18}$", tn):
+        return "cainiao"
+    if re.match(r"^(LP|LX|RX)\d{9,18}CN$", tn):
+        return "cainiao"
     return None
+
 
 
 class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -323,12 +337,23 @@ class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
         except Exception:
             pass
 
-        if parcel is None:
+        carrier_hint = _guess_carrier_from_format(tracking_number)
+
+        if parcel is None and carrier_hint == "cainiao":
+            try:
+                parcel = await CaiNiaoTrackingClient(session).async_get_tracking(tracking_number)
+                carrier = CARRIER_CAINIAO
+            except CaiNiaoTrackingError:
+                errors["base"] = "cainiao_cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error validating Cainiao tracking number")
+                errors["base"] = "unknown"
+
+        if parcel is None and not errors:
             try:
                 parcel = await PostenTrackingClient(session).async_get_tracking(tracking_number)
                 carrier = CARRIER_POSTEN
             except PostenTrackingError:
-                carrier_hint = _guess_carrier_from_format(tracking_number)
                 if carrier_hint == "helthjem":
                     errors["base"] = "helthjem_cannot_connect"
                 elif carrier_hint == "posten":
@@ -341,7 +366,12 @@ class NorwegianParcelTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN)
 
         if parcel is not None:
             display_name = str(user_input.get(CONF_DISPLAY_NAME) or "").strip()
-            carrier_label = "Helthjem" if carrier == CARRIER_HELTHJEM else "Posten"
+            if carrier == CARRIER_CAINIAO:
+                carrier_label = "AliExpress"
+            elif carrier == CARRIER_HELTHJEM:
+                carrier_label = "Helthjem"
+            else:
+                carrier_label = "Posten"
             title = display_name or parcel.sender_name or f"{carrier_label} {tracking_number}"
             return self.async_create_entry(
                 title=title,

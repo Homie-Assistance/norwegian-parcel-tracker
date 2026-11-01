@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import aiohttp
@@ -20,6 +20,10 @@ class PostenTrackingError(Exception):
 
 class HelthjemTrackingError(Exception):
     """Raised when Helthjem tracking data cannot be fetched or parsed."""
+
+
+class CaiNiaoTrackingError(Exception):
+    """Raised when Cainiao tracking data cannot be fetched or parsed."""
 
 
 @dataclass
@@ -54,6 +58,7 @@ class ParcelData:
     height_cm: float | None = None
     home_delivery_url: str | None = None
     events: list[ParcelEvent] = field(default_factory=list)
+    status_authoritative: bool = False
 
     @property
     def latest_event(self) -> ParcelEvent | None:
@@ -61,6 +66,8 @@ class ParcelData:
 
     @property
     def is_delivered(self) -> bool:
+        if self.status_authoritative:
+            return self.current_status in {"DELIVERED", "PICKED_UP"}
         text = " ".join(
             str(x or "")
             for x in [
@@ -71,7 +78,7 @@ class ParcelData:
         ).lower()
         return (
             "pakken er levert" in text
-            or "delivered" in text
+            or ("delivered" in text and "undelivered" not in text)
             or "hentet pakken" in text
             or self.current_status in {"DELIVERED", "PICKED_UP"}
         )
@@ -581,4 +588,207 @@ def _parcel_from_html_fallback(text: str, tracking_number: str) -> ParcelData | 
         pickup_name=_sanitize_pickup_name(tid("pickup-point-link")),
         delivery_address=tid("parcel-details-delivery-address"),
         delivery_method=tid("parcel-details-delivery-method"),
+    )
+
+
+# ── Cainiao / AliExpress direct tracking ────────────────────────────────────────
+
+_CAINIAO_API = "https://global.cainiao.com/global/detail.json"
+
+# Cainiao action code → internal status string (same vocabulary as Posten statuses)
+# Source: cross-checked against ha-parcel-integrations/ha-cainiao and live endpoint responses.
+_CAINIAO_ACTION_STATUS: dict[str, str] = {
+    # Pre-shipment
+    "GWMS_ACCEPT": "REGISTERED",
+    "GWMS_PACKAGE": "REGISTERED",
+    "PRE_READY_TO_SHIP": "REGISTERED",
+    "CONSIGN": "REGISTERED",
+    # In transit — warehouse, sorting, line haul, transit depots
+    "CW_INBOUND": "IN_TRANSIT",
+    "CW_OUTBOUND": "IN_TRANSIT",
+    "CW_COMMON_PROCESSING1": "IN_TRANSIT",
+    "PU_PICKUP_SUCCESS": "IN_TRANSIT",
+    "GWMS_OUTBOUND": "IN_TRANSIT",
+    "SC_INBOUND_SUCCESS": "IN_TRANSIT",
+    "SC_OUTBOUND_SUCCESS": "IN_TRANSIT",
+    "SC_TRANS_INBOUND_SUCCESS": "IN_TRANSIT",
+    "SC_TRANS_OUTBOUND_SUCCESS": "IN_TRANSIT",
+    "CC_EX_START": "IN_TRANSIT",
+    "CC_EX_SUCCESS": "IN_TRANSIT",
+    "LH_HO_IN_SUCCESS": "IN_TRANSIT",
+    "LH_HO_AIRLINE": "IN_TRANSIT",
+    "LH_DEPART": "IN_TRANSIT",
+    "LH_ARRIVE": "IN_TRANSIT",
+    "LH_POST_COLLECTION": "IN_TRANSIT",
+    "COMMON_INTRANSIT": "IN_TRANSIT",
+    "TD_TRANS_DEPART": "IN_TRANSIT",
+    "TD_TRANS_ARRIVE": "IN_TRANSIT",
+    "TD_TRANS_ARRIVE_C": "IN_TRANSIT",
+    "CC_HO_IN_SUCCESS": "IN_TRANSIT",
+    "CC_IM_START": "IN_TRANSIT",
+    "CC_IM_SUCCESS": "IN_TRANSIT",
+    "CC_HO_OUT_SUCCESS": "IN_TRANSIT",
+    "GTMS_ACCEPT": "IN_TRANSIT",
+    "GTMS_SC_ARRIVE": "IN_TRANSIT",
+    "GTMS_SC_DEPART": "IN_TRANSIT",
+    "GTMS_OE_DEPART": "IN_TRANSIT",
+    "GTMS_DO_DEPART": "IN_TRANSIT",
+    "LAST_MILE_ASN_NOTIFY": "IN_TRANSIT",
+    # Import customs problems (not a failed delivery — held at customs)
+    "CC_IM_FAILURE": "CUSTOMS",
+    "CC_IM_EXCEPTION": "CUSTOMS",
+    # At pickup point (station signed for the parcel, not recipient)
+    "GSTA_INFORM_BUYER": "READY_FOR_PICKUP",
+    "GTMS_WAIT_SELF_PICK": "READY_FOR_PICKUP",
+    "GTMS_STA_SIGNED": "READY_FOR_PICKUP",
+    # Terminal states
+    "GTMS_SIGNED": "DELIVERED",
+    "GTMS_STA_SIGN_FAILURE": "ATTEMPTED_DELIVERY",
+    "EXCEPTION": "ATTEMPTED_DELIVERY",
+}
+
+_CAINIAO_LOGGED_UNKNOWN: set[str] = set()
+
+# Regex for extracting a tracking number from Cainiao's "PostNL 3SDFC0123456789" display string.
+_EMBEDDED_NUMBER_RE = re.compile(r"(?<![A-Z0-9])(?=[A-Z0-9]*[0-9])[A-Z0-9]{8,30}(?![A-Z0-9])")
+
+
+def _cainiao_action_to_status(action_code: str | None) -> str:
+    """Map a Cainiao action code to an internal status string."""
+    if not action_code:
+        return "UNKNOWN"
+    key = action_code.strip().upper()
+    mapped = _CAINIAO_ACTION_STATUS.get(key)
+    if mapped is None and key not in _CAINIAO_LOGGED_UNKNOWN:
+        _CAINIAO_LOGGED_UNKNOWN.add(key)
+        _LOGGER.warning("Unknown Cainiao action code %s — please report via GitHub", key)
+    return mapped or "UNKNOWN"
+
+
+def _cainiao_ms_to_iso(ms: Any) -> str | None:
+    """Convert Cainiao epoch-millisecond timestamp to ISO 8601 UTC string."""
+    if ms is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000, tz=timezone.utc).isoformat()
+    except (ValueError, OSError, OverflowError):
+        return None
+
+
+class CaiNiaoTrackingClient:
+    """Fetch AliExpress / Cainiao parcel data via Cainiao's public tracking endpoint.
+
+    No authentication required. Endpoint: https://global.cainiao.com/global/detail.json
+    """
+
+    def __init__(self, session: aiohttp.ClientSession) -> None:
+        self._session = session
+
+    async def async_get_tracking(self, tracking_number: str) -> ParcelData:
+        """Return tracking data for a Cainiao / AliExpress parcel."""
+        params = {"mailNos": tracking_number, "lang": "en-US"}
+        try:
+            async with self._session.get(
+                _CAINIAO_API,
+                params=params,
+                headers={"User-Agent": "Mozilla/5.0 HomeAssistant NorwegianParcelTracker/2.2"},
+                timeout=aiohttp.ClientTimeout(total=20),
+            ) as resp:
+                if resp.status != 200:
+                    raise CaiNiaoTrackingError(f"Cainiao returned HTTP {resp.status}")
+                try:
+                    payload = await resp.json(content_type=None)
+                except ValueError as err:
+                    raise CaiNiaoTrackingError(f"Cainiao returned unparseable body: {err}") from err
+        except CaiNiaoTrackingError:
+            raise
+        except Exception as err:
+            raise CaiNiaoTrackingError(f"Cainiao request failed: {err}") from err
+
+        if not payload.get("success"):
+            raise CaiNiaoTrackingError(
+                f"Cainiao response not successful: {payload.get('errorMsg') or payload}"
+            )
+
+        module: list = payload.get("module") or []
+        for entry in module:
+            if isinstance(entry, dict) and entry.get("mailNo", "").upper() == tracking_number.upper():
+                return _parcel_from_cainiao(entry, tracking_number)
+
+        # Tracking number not found yet — still being processed by seller
+        return ParcelData(
+            tracking_number=tracking_number,
+            product_name="AliExpress / Cainiao",
+            sender_name="AliExpress",
+            current_status="REGISTERED",
+            status_description="Tracking information not yet available",
+            events=[],
+            status_authoritative=True,
+        )
+
+
+def _parcel_from_cainiao(entry: dict, tracking_number: str) -> ParcelData:
+    """Build a ParcelData from a single Cainiao module entry."""
+    latest_trace: dict = entry.get("latestTrace") or {}
+    detail_list: list[dict] = [e for e in (entry.get("detailList") or []) if isinstance(e, dict)]
+
+    # Current status from latest trace action code; fall back to newest detail entry
+    current_action = latest_trace.get("actionCode")
+    if not current_action and detail_list:
+        current_action = max(detail_list, key=lambda e: e.get("time") or 0).get("actionCode")
+    current_status = _cainiao_action_to_status(current_action)
+
+    # When tracking has been submitted but no scans exist yet, use REGISTERED not UNKNOWN
+    if current_status == "UNKNOWN" and not detail_list and not latest_trace:
+        current_status = "REGISTERED"
+        status_description = "Tracking information not yet available"
+    else:
+        status_description = (
+            latest_trace.get("standerdDesc")  # Cainiao's own spelling
+            or latest_trace.get("desc")
+            or entry.get("statusDesc")
+            or entry.get("status")
+            or current_status
+        )
+
+    # Build event list sorted newest-first by epoch ms (avoids TZ-aware/naive datetime mixing)
+    events: list[ParcelEvent] = []
+    for ev in detail_list:
+        date_iso = _cainiao_ms_to_iso(ev.get("time")) or str(ev.get("timeStr") or "")
+        desc = ev.get("standerdDesc") or ev.get("desc") or ev.get("actionCode") or ""
+        events.append(ParcelEvent(
+            description=desc,
+            date_iso=date_iso or None,
+            location=ev.get("city") or None,
+            status=_cainiao_action_to_status(ev.get("actionCode")),
+            raw=ev,
+        ))
+
+    events.sort(key=lambda e: e.raw.get("time") or 0, reverse=True)
+
+    # ETA from globalEtaInfo (max time gives the outer bound)
+    eta = entry.get("globalEtaInfo") or {}
+    eta_ms = eta.get("deliveryMaxTime") or eta.get("deliveryMinTime")
+    estimated_delivery_iso = _cainiao_ms_to_iso(eta_ms)
+    estimated_delivery = estimated_delivery_iso[:10] if estimated_delivery_iso else None
+
+    # Local carrier's tracking number (e.g. Posten/PostNord number for Norway)
+    local_number: str | None = entry.get("copyRealMailNo")
+    if not local_number:
+        display = entry.get("realMailNo") or ""
+        m = _EMBEDDED_NUMBER_RE.search(display.upper())
+        local_number = m.group(0) if m else None
+
+    origin = (entry.get("originCountry") or "").upper()
+    return ParcelData(
+        tracking_number=tracking_number,
+        product_name="AliExpress / Cainiao",
+        sender_name=f"AliExpress ({origin})" if origin else "AliExpress",
+        current_status=current_status,
+        status_description=status_description,
+        estimated_delivery=estimated_delivery,
+        estimated_delivery_iso=estimated_delivery_iso,
+        delivery_method=f"Cainiao{f' → {local_number}' if local_number else ''}",
+        events=events,
+        status_authoritative=current_status != "UNKNOWN",
     )

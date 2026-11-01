@@ -1,6 +1,6 @@
 DOMAIN = "norwegian_parcel_tracker"
 NAME = "Norwegian Parcel Tracker"
-VERSION = "2.1.18"
+VERSION = "2.2.0"
 
 # ── Config entry types ─────────────────────────────────────────────────────────
 CONF_ENTRY_TYPE = "entry_type"
@@ -62,6 +62,7 @@ CONF_MAX_HEIGHT_CM = "max_height_cm"
 CONF_CARRIER = "carrier"
 CARRIER_POSTEN = "posten"
 CARRIER_HELTHJEM = "helthjem"
+CARRIER_CAINIAO = "cainiao"   # AliExpress / Cainiao direct tracking
 
 # ── Auto-delete ────────────────────────────────────────────────────────────────
 CONF_AUTO_DELETE_DELIVERED_HOURS = "auto_delete_delivered_hours"

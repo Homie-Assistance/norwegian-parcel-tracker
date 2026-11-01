@@ -1,6 +1,6 @@
 # Norwegian Parcel Tracker
 
-Track parcels from Posten, Bring, and Helthjem directly in Home Assistant.
+Track parcels from Posten, Bring, Helthjem, and AliExpress/Cainiao directly in Home Assistant.
 
 Creates a set of sensor entities for each parcel, with optional notifications, calendar events, and a companion Lovelace card.
 
@@ -111,6 +111,32 @@ Enable **Create a timed calendar event** in a parcel's options, then set **Calen
 
 ---
 
+## AliExpress / Cainiao tracking
+
+Parcels ordered via AliExpress are shipped internationally by **Cainiao** logistics and carry tracking numbers in the format `LP…CN`, `LX…CN`, or `RX…CN`. The integration calls Cainiao's own public tracking endpoint directly — no third-party API, no sign-up, no API key required.
+
+### Setup
+
+No extra configuration is needed. Add any parcel with a `LP…`, `LX…`, or `RX…` tracking number — the integration auto-detects the Cainiao carrier and starts tracking immediately.
+
+### Tracking number formats
+
+| Format | Example | Notes |
+|---|---|---|
+| `LP` + 9–18 digits + optional 2-letter country | `LP001234567CN` | Main AliExpress / Cainiao format |
+| `LX` + 9–18 digits + optional 2-letter country | `LX001234567CN` | Variant for some products |
+| `RX` + 9–18 digits + optional 2-letter country | `RX001234567CN` | Another variant |
+| `AP` + 9–18 digits | `AP00100116480005` | Global Cainiao Shipping (no country suffix) |
+
+### What you get
+
+- Full pre-Norway event history: warehouse scan, departure from China, customs, handoff to Posten/PostNord
+- Status mapped to the same semantic colours used for Posten/Helthjem parcels
+- When Cainiao knows the local carrier's tracking number (e.g. the PostNord number), it appears in the **Delivery method** sensor
+- The international number is tracked as-is; once Posten assigns a Norwegian number you can add that separately for the domestic leg
+
+---
+
 ## Email watcher
 
 The email watcher automatically scans an IMAP mailbox for order confirmation emails and adds recognised tracking numbers without any manual input.
@@ -139,6 +165,7 @@ The watcher looks for these tracking number formats:
 | `JV` + 6–14 digits | `JV01234567` | Bring / Posten |
 | 2 letters + 8–9 digits + 2 letters | `RR123456789NO` | International postal (UPU) |
 | 20 digits starting with `0037` or `0033` | `00370000000000000000` | Posten / PostNord GS1 |
+| `LP`/`LX`/`RX`/`AP` + 9–18 digits + optional 2-letter country | `LP001234567CN`, `AP00100116480005` | AliExpress / Cainiao |
 
 Numbers are validated via the carrier API before being added. Invalid or unsupported numbers are silently skipped and will not be retried.
 
@@ -201,7 +228,8 @@ A toolbar sits directly above every map (both the selected-parcel route map and 
 
 - Parcel event history is shown in entity attributes but is not backfilled into the HA recorder.
 - Location names are not geocoded to map coordinates.
-- This integration is not affiliated with Posten, Bring, Posten Bring AS, or Helthjem.
+- This integration is not affiliated with Posten, Bring, Posten Bring AS, Helthjem, Cainiao, or AliExpress.
+- The Cainiao tracking endpoint (`global.cainiao.com`) is an undocumented public API. It may change without notice and is used here for personal, non-commercial tracking only.
 
 ---
 
@@ -216,6 +244,7 @@ Planned features in rough priority order:
 | **Parcel location map** | Planned | Create `device_tracker` entities with geocoded coordinates (Nominatim/OpenStreetMap) so parcels appear on the native HA map. Route history will be stored in `.storage/`. |
 | **Custom route map card** | Planned | Companion Lovelace card with a Leaflet.js map showing the full delivery route — built on top of the location history above. |
 | **Full event history storage** | Planned | Persist all tracking events (including geocoded coordinates) in HA `.storage/` for map routes and future delivery-time statistics. |
+| **AliExpress / Cainiao tracking** | Released (v2.2.0) | Direct call to Cainiao's public endpoint. Supports LP…CN, LX…CN, RX…CN, and AP… number formats. No sign-up or API key required. |
 | **PostNord support** | Blocked | `feature/postnord` branch exists. Blocked on obtaining a PostNord Partner API agreement. |
 | **Delivery statistics** | Future | Charts for typical delivery times per carrier, based on accumulated history. |
 
