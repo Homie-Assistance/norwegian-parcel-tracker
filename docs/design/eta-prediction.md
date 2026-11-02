@@ -1,7 +1,7 @@
 # ETA Prediction for Upcoming Stops — Design Note
 
 **Issue:** [#21](https://github.com/Homie-Assistance/norwegian-parcel-tracker/issues/21)
-**Status:** Design only — no implementation
+**Status:** Phase 1 shipped in v2.5.0 — priors only, final delivery prediction only, per-leg learned durations not yet used
 **Date:** 2026-11-02
 
 ---

@@ -16,7 +16,8 @@ Each parcel gets the following entities:
 |---|---|---|---|
 | Status | Sensor | All | Current parcel status text |
 | Latest event | Sensor | All | Most recent tracking event description |
-| Estimated delivery | Sensor | All | Estimated delivery date |
+| Estimated delivery | Sensor | All | Estimated delivery date (carrier-provided) |
+| Predicted delivery | Sensor | All | Predicted delivery time based on last confirmed stop and carrier priors. Only available while the parcel is in transit; shows "unavailable" for delivered or pre-shipment parcels. |
 | Pickup point | Sensor | All | Name of pickup location |
 | Delivery method | Sensor | All | Carrier product name (e.g. Pakke i postkassen, Helthjem) |
 | Sender | Sensor | Posten/Bring | Sender name |
@@ -246,6 +247,7 @@ Planned features in rough priority order:
 | **Full event history storage** | Planned | Persist all tracking events (including geocoded coordinates) in HA `.storage/` for map routes and future delivery-time statistics. |
 | **AliExpress / Cainiao tracking** | Released (v2.2.0) | Direct call to Cainiao's public endpoint. Supports LP…CN, LX…CN, RX…CN, and AP… number formats. No sign-up or API key required. |
 | **3D Globe route map** | Released (v2.4.0) | The flat route map is replaced with a 3D Globe.gl globe. On open: 3-second auto-rotating globe intro, then camera flies to frame the route. Confirmed legs are drawn as dim static lines showing the traveled path. For in-transit and delayed parcels, an animated dashed arc runs from the last confirmed stop to the HA home location, indicating the parcel is "somewhere along this line". All confirmed stops shown as checkpoint markers (customs 🛃, airport ✈️, warehouse 🏭, etc.). Night-lights Earth texture. Overview (all-parcels) map still uses the flat Leaflet view. Carrier logos not shown (no hotlinking to external assets). |
+| **ETA prediction** | Released (v2.5.0) | New **Predicted delivery** sensor per parcel. Uses the last confirmed stop type (customs, airport, warehouse, last-mile) and carrier-specific timing priors to estimate delivery time with a P25–P75 confidence window. State = predicted ISO datetime; attributes include low/high bounds, confidence level, and the stop the estimate is based on. Only active while the parcel is in transit. |
 | **PostNord support** | Blocked | `feature/postnord` branch exists. Blocked on obtaining a PostNord Partner API agreement. |
 | **Delivery statistics** | Future | Charts for typical delivery times per carrier, based on accumulated history. |
 

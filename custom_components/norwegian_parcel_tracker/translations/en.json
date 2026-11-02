@@ -177,6 +177,7 @@
       "status": { "name": "Status" },
       "latest_event": { "name": "Latest event" },
       "estimated_delivery": { "name": "Estimated delivery" },
+      "predicted_eta": { "name": "Predicted delivery" },
       "pickup_point": { "name": "Pickup point" },
       "sender": { "name": "Sender" },
       "delivery_method": { "name": "Delivery method" },

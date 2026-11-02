@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength, UnitOfMass
 from homeassistant.core import HomeAssistant, callback
@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CARRIER_CAINIAO,
     CARRIER_HELTHJEM,
     CARRIER_POSTEN,
     CONF_DISPLAY_NAME,
@@ -19,6 +20,7 @@ from .const import (
     DOMAIN,
     ENTRY_TYPE_GLOBAL,
 )
+from .eta import predict_eta
 from .coordinator import PostenTrackingCoordinator
 from .event_history import DeliveryStatsStore
 from .runtime_strings import _t
@@ -43,6 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             ParcelStatusSensor(coordinator, entry),
             LatestEventSensor(coordinator, entry),
             EstimatedDeliverySensor(coordinator, entry),
+            PredictedEtaSensor(coordinator, entry),
             PickupPointSensor(coordinator, entry),
             SenderSensor(coordinator, entry),
             DeliveryMethodSensor(coordinator, entry),
@@ -149,6 +152,54 @@ class EstimatedDeliverySensor(BaseParcelSensor):
 
     @property
     def icon(self): return "mdi:calendar"
+
+
+class PredictedEtaSensor(BaseParcelSensor):
+    """Predicted delivery ETA derived from last confirmed stop and carrier priors."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "predicted_eta")
+
+    def _get_prediction(self) -> dict[str, Any] | None:
+        """Compute prediction from latest_event, which always reflects the newest stop.
+
+        Uses latest_event rather than route_coords because route_coords is built in a
+        background task (empty on first poll) and skips events that could not be geocoded.
+        """
+        data = self.coordinator.data
+        if not data:
+            return None
+        latest = data.latest_event
+        if not latest:
+            return None
+        carrier = self.coordinator._carrier or CARRIER_POSTEN
+        return predict_eta(
+            latest.description,
+            latest.location,
+            latest.date_iso,
+            carrier,
+            data.current_status,
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return TZ-aware datetime so HA can use it in time-based automations."""
+        result = self._get_prediction()
+        return result.get("predicted_eta") if result else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs: dict[str, Any] = {"parcel_tracker_entity": self._key}
+        result = self._get_prediction()
+        if result:
+            # Expose all keys except the raw datetime (already the state value)
+            attrs.update({k: v for k, v in result.items() if k != "predicted_eta"})
+        return attrs
+
+    @property
+    def icon(self) -> str:
+        return "mdi:clock-fast"
 
 
 class PickupPointSensor(BaseParcelSensor):

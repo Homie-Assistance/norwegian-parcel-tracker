@@ -177,6 +177,7 @@
       "status": { "name": "Status" },
       "latest_event": { "name": "Siste hendelse" },
       "estimated_delivery": { "name": "Estimert levering" },
+      "predicted_eta": { "name": "Forventet levering" },
       "pickup_point": { "name": "Hentested" },
       "sender": { "name": "Avsender" },
       "delivery_method": { "name": "Leveringsmetode" },
