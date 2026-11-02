@@ -1,6 +1,6 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from aioresponses import aioresponses
-import aiohttp
 
 from custom_components.norwegian_parcel_tracker.api import (
     HelthjemTrackingClient,
@@ -87,45 +87,51 @@ def test_parcel_from_helthjem_no_events():
 
 # ── HelthjemTrackingClient (mocked HTTP) ─────────────────────────────────────
 
+def _make_mock_session(payload: dict, status: int = 200):
+    """Return a mock aiohttp.ClientSession whose .post() returns the given payload."""
+    mock_resp = AsyncMock()
+    mock_resp.status = status
+    mock_resp.json = AsyncMock(return_value=payload)
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    session = MagicMock()
+    session.post = MagicMock(return_value=mock_resp)
+    return session
+
+
 @pytest.mark.asyncio
 async def test_client_success():
     fixture = load_fixture("helthjem_registered.json")
-    async with aiohttp.ClientSession() as session:
-        with aioresponses() as mock:
-            mock.post(GRAPHQL_URL, payload=fixture)
-            client = HelthjemTrackingClient(session)
-            parcel = await client.async_get_tracking(TRACKING_NUMBER)
+    session = _make_mock_session(fixture)
+    client = HelthjemTrackingClient(session)
+    parcel = await client.async_get_tracking(TRACKING_NUMBER)
 
     assert parcel.tracking_number == TRACKING_NUMBER
     assert parcel.current_status == "REGISTERED"
+    assert session.post.call_args.args[0] == GRAPHQL_URL
 
 
 @pytest.mark.asyncio
 async def test_client_http_error():
-    async with aiohttp.ClientSession() as session:
-        with aioresponses() as mock:
-            mock.post(GRAPHQL_URL, status=500)
-            client = HelthjemTrackingClient(session)
-            with pytest.raises(HelthjemTrackingError, match="HTTP 500"):
-                await client.async_get_tracking(TRACKING_NUMBER)
+    session = _make_mock_session({}, status=500)
+    client = HelthjemTrackingClient(session)
+    with pytest.raises(HelthjemTrackingError, match="HTTP 500"):
+        await client.async_get_tracking(TRACKING_NUMBER)
 
 
 @pytest.mark.asyncio
 async def test_client_graphql_error():
     fixture = load_fixture("helthjem_graphql_error.json")
-    async with aiohttp.ClientSession() as session:
-        with aioresponses() as mock:
-            mock.post(GRAPHQL_URL, payload=fixture)
-            client = HelthjemTrackingClient(session)
-            with pytest.raises(HelthjemTrackingError, match="GraphQL error"):
-                await client.async_get_tracking(TRACKING_NUMBER)
+    session = _make_mock_session(fixture)
+    client = HelthjemTrackingClient(session)
+    with pytest.raises(HelthjemTrackingError, match="GraphQL error"):
+        await client.async_get_tracking(TRACKING_NUMBER)
 
 
 @pytest.mark.asyncio
 async def test_client_empty_data():
-    async with aiohttp.ClientSession() as session:
-        with aioresponses() as mock:
-            mock.post(GRAPHQL_URL, payload={"data": {"getParcelTrackingDetails": None}})
-            client = HelthjemTrackingClient(session)
-            with pytest.raises(HelthjemTrackingError, match="No tracking data"):
-                await client.async_get_tracking(TRACKING_NUMBER)
+    session = _make_mock_session({"data": {"getParcelTrackingDetails": None}})
+    client = HelthjemTrackingClient(session)
+    with pytest.raises(HelthjemTrackingError, match="No tracking data"):
+        await client.async_get_tracking(TRACKING_NUMBER)
