@@ -2,9 +2,9 @@
 
 ## 2.5.x (post-release fixes)
 
-- **Globe arc rendering**: switched from 3D tube geometry to zoom-invariant line rendering (`arcStroke(null)`). Tubes scaled with the globe radius and picked up THREE.js specular highlights, appearing white regardless of status color and growing proportionally huge on zoom-in. Lines render the actual status color and stay thin at any zoom level.
+- **Globe arc rendering**: arc tube thickness now scales proportionally with camera altitude so the arc appears approximately the same width on screen at any zoom level. `arcStroke` is set to 0.25 at the route's stop pose and decreases as the user zooms in — preventing the "huge wall" effect at close range while keeping the arc clearly visible at the default view. Historical legs use 80% opacity (was 60%).
 - **Globe zoom**: reduced intro wait from 3.0 s to 2.7 s; fly-in animation from 2.5 s to 1.5 s. Total intro time cut from 5.5 s to 4.2 s.
-- **Globe camera**: raised minimum altitude from 1.0 to 1.8 for short domestic routes. Altitude 1.0 zoomed face-on-the-map for Norway-only parcels; 1.8 shows recognisable globe context.
+- **AliExpress / Cainiao map**: fixed geocoding failure for non-Norwegian event city names (e.g. "Shatian Town"). The coordinator was defaulting `country="NO"` for all events without an explicit `countryCode`, so every Chinese city lookup returned no results. Now: when a city name comes directly from the carrier's raw event dict and there is no postal code or explicit country, Nominatim is queried without a country constraint (worldwide search). Posten and Helthjem geocoding are unchanged.
 - **Tests**: replaced `aioresponses` with stdlib `unittest.mock.AsyncMock`. `aioresponses 0.7.9` is incompatible with `aiohttp 3.14+` (`ClientResponse.__init__` gained a required argument). Test pin bumped to `aiohttp>=3.14.4` (fixes all 8 Dependabot CVEs — server-side vulnerabilities, not affecting this integration at runtime).
 
 ## 2.5.0

@@ -1226,7 +1226,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const midLat  = (Math.min(...allLats) + Math.max(...allLats)) / 2;
     const midLng  = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
     const span    = Math.max(Math.max(...allLats) - Math.min(...allLats), Math.max(...allLngs) - Math.min(...allLngs));
-    const altitude = Math.max(1.8, Math.min(3.5, span / 18));
+    const altitude = Math.max(1.0, Math.min(3.5, span / 28));
     const routePov = { lat: midLat, lng: midLng, altitude };
 
     // preserveDrawingBuffer: true is required for canvas.toBlob() screenshot to work
@@ -1258,12 +1258,12 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       .arcsData(arcs)
       .arcStartLat("startLat").arcStartLng("startLng")
       .arcEndLat("endLat").arcEndLng("endLng")
-      .arcColor((d) => d.isFuture ? arcColor : arcColor + "99")
+      .arcColor((d) => d.isFuture ? arcColor : arcColor + "cc")
       .arcDashLength((d) => d.isFuture ? 0.2 : 1.0)
       .arcDashGap((d) => d.isFuture ? 0.3 : 0.0)
       .arcDashInitialGap(0)
       .arcDashAnimateTime((d) => d.isFuture ? 2000 : 0)
-      .arcStroke(null)
+      .arcStroke(0.25)
       .arcAltitudeAutoScale(0.25)
       // HTML markers at each stop
       .htmlElementsData(markers)
@@ -1336,6 +1336,20 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         globe.pointOfView(routePov, 1500);
       }, 2700);
     }
+
+    // Scale arc tube thickness proportionally with camera altitude so the arc
+    // appears the same on-screen width at the stop pose (0.25) regardless of zoom.
+    const K = 0.25;
+    const stopAlt = routePov.altitude;
+    let lastStroke = K;
+    globe.controls().addEventListener('change', () => {
+      if (!globe) return;
+      const s = Math.max(0.004, K * globe.pointOfView().altitude / stopAlt);
+      if (Math.abs(s - lastStroke) / lastStroke > 0.08) {
+        lastStroke = s;
+        globe.arcStroke(s);
+      }
+    });
   }
 
   /** Classify a route coordinate into a checkpoint type for globe marker styling. */
