@@ -1139,6 +1139,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       const s = document.createElement("script");
       s.id = "npt-globe-js";
       s.src = _GLOBE_JS;
+      s.integrity = "sha384-1uolMBZ25k3zJcNwCLEv49+L+m2dZudqAzsoSAJfQTzDCSBxJzrMuZ2dkp/5JKiT";
       s.crossOrigin = "anonymous";
       s.onload = resolve;
       s.onerror = (e) => { console.warn("NPT: Globe.gl script load error", e); reject(e); };
@@ -1340,11 +1341,16 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   /** Classify a route coordinate into a checkpoint type for globe marker styling. */
   _checkpointInfo(c) {
     const desc = ((c.description || "") + " " + (c.location || "")).toLowerCase();
-    if (/customs|border|import|export|clearance|toll/.test(desc))           return { icon: "🛃", color: "#ff9800" };
-    if (/airport|air.?hub|departure|arrival|airline|terminal.{0,6}air/.test(desc)) return { icon: "✈️", color: "#4fc3f7" };
-    if (/sort|warehouse|center|hub|facility|depot|logistics/.test(desc))    return { icon: "🏭", color: "#80cbc4" };
-    if (/deliver|courier|local|final|last.?mile/.test(desc))                return { icon: "🚚", color: "#a5d6a7" };
-    if (/post|postal|mail/.test(desc))                                       return { icon: "📮", color: "#ce93d8" };
+    // Norwegian: toll, grense, fortolling, tollklarering, import; English: customs, border, clearance
+    if (/customs|border|import|export|clearance|toll(?!.{0,3}free)|grense|fortoll|klarering/.test(desc)) return { icon: "🛃", color: "#ff9800" };
+    // Norwegian: flyplass, lufthavn; English: airport, airline, departure, arrival
+    if (/airport|air.?hub|departure|arrival|airline|flyplass|lufthavn/.test(desc)) return { icon: "✈️", color: "#4fc3f7" };
+    // Norwegian: sortering, lager, senter, terminal, godsterminal, mellomlager; English: sort, warehouse, hub, depot
+    if (/sort|warehouse|center|hub|facility|depot|logistics|sorter|lager|senter|terminal|gods/.test(desc)) return { icon: "🏭", color: "#80cbc4" };
+    // Norwegian: levering, utlevering, bud, lokal; English: deliver, courier, local, last mile
+    if (/deliver|courier|local|final|last.?mile|levering|utlevering|bud(?!kk)/.test(desc)) return { icon: "🚚", color: "#a5d6a7" };
+    // Norwegian: postkontor, postkasse, brevhus; English: postal, mail — but NOT "Posten" alone (too broad)
+    if (/postal|mail(?!box)|postkontor|postkasse|brevhus/.test(desc)) return { icon: "📮", color: "#ce93d8" };
     return { icon: "📍", color: "#90a4ae" };
   }
 
