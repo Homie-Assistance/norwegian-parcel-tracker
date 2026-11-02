@@ -1265,6 +1265,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       .arcDashAnimateTime((d) => d.isFuture ? 2000 : 0)
       .arcStroke(0.25)
       .arcAltitudeAutoScale(0.25)
+      .arcsTransitionDuration(0)
       // HTML markers at each stop
       .htmlElementsData(markers)
       .htmlLat("lat")
