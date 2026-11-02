@@ -1226,7 +1226,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const midLat  = (Math.min(...allLats) + Math.max(...allLats)) / 2;
     const midLng  = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
     const span    = Math.max(Math.max(...allLats) - Math.min(...allLats), Math.max(...allLngs) - Math.min(...allLngs));
-    const altitude = Math.max(1.0, Math.min(3.5, span / 28));
+    const altitude = Math.max(1.8, Math.min(3.5, span / 18));
     const routePov = { lat: midLat, lng: midLng, altitude };
 
     // preserveDrawingBuffer: true is required for canvas.toBlob() screenshot to work
@@ -1263,8 +1263,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       .arcDashGap((d) => d.isFuture ? 0.3 : 0.0)
       .arcDashInitialGap(0)
       .arcDashAnimateTime((d) => d.isFuture ? 2000 : 0)
-      .arcStroke(0.8)
-      .arcAltitudeAutoScale(0.2)
+      .arcStroke(0.25)
+      .arcAltitudeAutoScale(0.25)
       // HTML markers at each stop
       .htmlElementsData(markers)
       .htmlLat("lat")
@@ -1333,8 +1333,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         this._animTimeout = null;
         if (!this._globeInstance) return;
         globe.controls().autoRotate = false;
-        globe.pointOfView(routePov, 2500);
-      }, 3000);
+        globe.pointOfView(routePov, 1500);
+      }, 2700);
     }
   }
 
