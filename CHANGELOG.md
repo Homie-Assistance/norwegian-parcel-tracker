@@ -1,5 +1,69 @@
 # Changelog
 
+## 2.5.x (post-release fixes)
+
+- **Globe arc rendering**: switched from 3D tube geometry to zoom-invariant line rendering (`arcStroke(null)`). Tubes scaled with the globe radius and picked up THREE.js specular highlights, appearing white regardless of status color and growing proportionally huge on zoom-in. Lines render the actual status color and stay thin at any zoom level.
+- **Globe zoom**: reduced intro wait from 3.0 s to 2.7 s; fly-in animation from 2.5 s to 1.5 s. Total intro time cut from 5.5 s to 4.2 s.
+- **Globe camera**: raised minimum altitude from 1.0 to 1.8 for short domestic routes. Altitude 1.0 zoomed face-on-the-map for Norway-only parcels; 1.8 shows recognisable globe context.
+- **Tests**: replaced `aioresponses` with stdlib `unittest.mock.AsyncMock`. `aioresponses 0.7.9` is incompatible with `aiohttp 3.14+` (`ClientResponse.__init__` gained a required argument). Test pin bumped to `aiohttp>=3.14.4` (fixes all 8 Dependabot CVEs — server-side vulnerabilities, not affecting this integration at runtime).
+
+## 2.5.0
+
+- **Predicted delivery sensor**: new `predicted_eta` sensor entity per parcel. Uses the last confirmed stop type (customs, airport, warehouse, last-mile) and carrier-specific timing priors (Posten/Helthjem vs. Cainiao) to estimate delivery time. State = TZ-aware ISO datetime usable in HA time-based automations. Attributes: `predicted_eta_low`, `predicted_eta_high`, `overdue`, `confidence`, `basis_stop_type`, `basis_carrier_group`, `basis_median_hours`, `last_confirmed_stop`, `last_confirmed_time`. Only active while the parcel is in transit; shows unavailable for delivered or pre-shipment parcels. Issue #21.
+
+## 2.4.0
+
+- **3D Globe route map**: flat Leaflet map replaced with a Globe.gl 3D globe for the selected-parcel detail view. Features: 3-second auto-rotating intro, camera flies to frame the route, checkpoint markers (customs 🛃, airport ✈️, warehouse 🏭, delivery 🚚, etc.), animated dashed arc from last confirmed stop to HA home for in-transit/delayed parcels, night-lights Earth texture. SRI integrity hash on Globe.gl CDN script (`sha384-…`).
+- **Norwegian checkpoint terms**: `_checkpointInfo()` in `panel.js` now recognises Norwegian keywords (`toll`, `grense`, `fortoll`, `klarering`, `flyplass`, `lufthavn`, `sorter`, `lager`, `senter`, `gods`, `levering`, `utlevering`, `bud`).
+
+## 2.3.0
+
+- **Transit slide-in animation**: for in-transit and delayed parcels the route map shows an animated dashed arc from the last confirmed stop toward the HA home location, indicating the parcel is somewhere along that path. Fixed detail pane not updating after manual Refresh.
+
+## 2.2.0
+
+- **AliExpress / Cainiao tracking**: direct call to Cainiao's public endpoint (`global.cainiao.com`) — no API key, no sign-up. Auto-detects `LP…`, `LX…`, `RX…`, and `AP…` tracking number formats. Status codes mapped to the same semantic set as Posten/Helthjem. Email watcher extended to extract Cainiao numbers.
+
+## 2.1.18
+
+- Map toolbar: zoom in/out, fit-to-route, PNG screenshot, and full-window expand buttons above every map.
+
+## 2.1.17
+
+- Timed calendar events: creates a 1-hour event on the estimated delivery date. Events start at 08:00 and stagger by 30 min when multiple parcels share a day. Deduplicated by tracking number across restarts.
+
+## 2.1.16
+
+- Semantic map route colors keyed to delivery status. Tile-only filter in the parcel list.
+
+## 2.1.15
+
+- Truck emoji 🚚 for in-transit parcels in the panel table. Carrier ETA estimate shown in the detail pane.
+
+## 2.1.14
+
+- Selectable route stop count (5 / 10 / 20 / all). Map controls toolbar above the route map.
+
+## 2.1.13
+
+- Color-coded route line and parcel list rows by delivery status (blue = in transit, grey = delivered, amber = ready for pickup, etc.).
+
+## 2.1.12
+
+- Full settings panel (language, mailbox/car-boot/carry-by-hand fit checks, notify service, calendar, stale thresholds, auto-remove timer). Parcel list filter toolbar (search, status filter, show/hide delivered).
+
+## 2.1.11
+
+- Fixed map flickering on every HA state push. Map now only re-renders when the selected parcel's route coordinates actually change.
+
+## 2.1.10
+
+- Switched route map tiles to OpenTopoMap (no Referer header requirement, CC-BY-SA).
+
+## 2.1.6 – 2.1.9
+
+- Various panel and map fixes: route map with directional arrows and checkpoint icons; carrier tracking links and smart disruption search; Norwegian i18n; animated plane on route; time-at-location column; pirate map easter egg removed; add-parcel from the panel; tile provider migrations (CartoDB → OSM → OpenTopoMap).
+
 ## 2.0.0
 
 ### New features
