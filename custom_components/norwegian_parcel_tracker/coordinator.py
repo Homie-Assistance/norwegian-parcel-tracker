@@ -210,11 +210,18 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             return
         raw = latest.raw or {}
         postal = raw.get("postalCode") or ""
-        city = raw.get("city") or ""
+        raw_city = raw.get("city") or ""
+        city = raw_city
         if not city and latest.location:
             city = (latest.location or "").split()[-1]
-        country = raw.get("countryCode") or "NO"
-        key = f"{country}|{postal}|{city}".lower()
+        explicit_country = raw.get("countryCode")
+        if explicit_country:
+            country: str | None = explicit_country
+        elif raw_city and not postal:
+            country = None  # city from raw event — may be non-Norwegian; search globally
+        else:
+            country = "NO"
+        key = f"{country or ''}|{postal}|{city}".lower()
         if key == self._last_geocoded_key or not (postal or city):
             return
         geocoder: NominatimGeocoder | None = self.hass.data.get(DOMAIN, {}).get("_geocoder")
@@ -239,11 +246,18 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
             for event in events:
                 raw = event.raw or {}
                 postal = raw.get("postalCode") or ""
-                city = raw.get("city") or ""
+                raw_city = raw.get("city") or ""
+                city = raw_city
                 if not city and event.location:
                     city = (event.location or "").split()[-1]
-                country = raw.get("countryCode") or "NO"
-                loc_key = f"{country}|{postal}|{city}".lower()
+                explicit_country = raw.get("countryCode")
+                if explicit_country:
+                    country: str | None = explicit_country
+                elif raw_city and not postal:
+                    country = None  # city from raw event — may be non-Norwegian; search globally
+                else:
+                    country = "NO"
+                loc_key = f"{country or ''}|{postal}|{city}".lower()
                 if not (postal or city) or loc_key in seen_keys:
                     continue
                 seen_keys.add(loc_key)

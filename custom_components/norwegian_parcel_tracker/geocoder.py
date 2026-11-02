@@ -51,14 +51,14 @@ class NominatimGeocoder:
         self,
         postal_code: str | None,
         city: str | None,
-        country: str = "NO",
+        country: str | None = "NO",
     ) -> tuple[float, float] | None:
         if not postal_code and not city:
             return None
         if not self._loaded:
             await self.async_load()
 
-        key = f"{country}|{postal_code or ''}|{city or ''}".lower()
+        key = f"{country or ''}|{postal_code or ''}|{city or ''}".lower()
         if key in self._cache:
             return self._cache[key]
 
@@ -88,7 +88,9 @@ class NominatimGeocoder:
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
         session = async_get_clientsession(self._hass)
-        params: dict[str, str] = {"format": "json", "limit": "1", "country": country}
+        params: dict[str, str] = {"format": "json", "limit": "1"}
+        if country:
+            params["country"] = country
         if postal_code:
             params["postalcode"] = postal_code
         if city:
