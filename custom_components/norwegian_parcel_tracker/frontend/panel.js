@@ -39,6 +39,12 @@ const _CARTO_ATTR = "Kartendaten: &copy; <a href='https://openstreetmap.org/copy
 const _LEAFLET_CSS = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
 const _LEAFLET_JS  = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
 
+const _GLOBE_JS        = "https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js";
+// Textures ship in three-globe (globe.gl's peer dep), not in the globe.gl package itself
+const _GLOBE_EARTH_IMG = "https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/earth-night.jpg";
+const _GLOBE_BUMP_IMG  = "https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/earth-topology.png";
+const _GLOBE_SPACE_IMG = "https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/night-sky.png";
+
 class NorwegianParcelTrackerPanel extends HTMLElement {
   constructor() {
     super();
@@ -48,6 +54,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._filterText = "";
     this._shadow = this.attachShadow({ mode: "open" });
     this._leafletMap = null;
+    this._globeInstance = null;
     this._animTimeout = null;
     const nav = (navigator.language || "").toLowerCase();
     const navIsNo = nav.startsWith("nb") || nav.startsWith("no") || nav.startsWith("nn");
@@ -219,13 +226,6 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   }
 
   _searchEngine()    { return this._getSetting("npt-search-engine", "google"); }
-  _mapDefaultZoom()  { return this._getSetting("npt-map-zoom-mode", "last2"); }
-
-  // Active stop count — saved per-device override, or derived from the zoom-mode default.
-  _activeStopCount() {
-    const def = this._mapDefaultZoom() === "last2" ? "2" : "all";
-    return this._getSetting("npt-map-stop-count", def);
-  }
   _possiblyLostDays(){ return parseInt(this._getSetting("npt-possibly-lost-days", "3"), 10); }
   _lostDays()        { return parseInt(this._getSetting("npt-lost-days", "5"), 10); }
 
@@ -340,8 +340,6 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   _showSettingsDialog() {
     const engine    = this._searchEngine();
-    const zoom      = this._mapDefaultZoom();
-    const transitAnim = this._getSetting("npt-transit-anim", "on");
     const posLost = this._possiblyLostDays();
     const lost    = this._lostDays();
     const lang    = this._getSetting("npt-language", "auto");
@@ -363,16 +361,6 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       _row(no ? "Automatisk (nettleser)" : "Auto-detect (browser)", "auto", "npt-lang", lang === "auto"),
       _row("Norsk",   "nb", "npt-lang", lang === "nb"),
       _row("English", "en", "npt-lang", lang === "en"),
-    ].join(""));
-
-    const zoomSection = _sec(no ? "Kart — standardvisning" : "Map — default view", [
-      _row(no ? "Siste 2 stopp (nåværende + forrige)" : "Last 2 stops (current + previous)", "last2", "npt-zoom", zoom !== "all"),
-      _row(no ? "Hele ruten" : "Full route", "all", "npt-zoom", zoom === "all"),
-    ].join(""));
-
-    const animSection = _sec(no ? "Kart — glideanimasjon ved innlasting" : "Map — slide-in animation on load", [
-      _row(no ? "På — marker glir fra forrige til siste stopp" : "On — marker slides from previous to current stop", "on",  "npt-anim", transitAnim === "on"),
-      _row(no ? "Av" : "Off", "off", "npt-anim", transitAnim === "off"),
     ].join(""));
 
     const threshSection = _sec(no ? "Statusterskel (dager uten oppdatering)" : "Status thresholds (days without update)",
@@ -399,7 +387,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const overlay = this._showModal(`
       <div class="npt-dialog" style="max-height:82vh;overflow-y:auto;max-width:400px">
         <h3>⚙️ ${no ? "Innstillinger" : "Settings"}</h3>
-        ${langSection}${zoomSection}${animSection}${threshSection}${engineSection}
+        ${langSection}${threshSection}${engineSection}
         <div class="npt-actions">
           <button class="npt-btn npt-btn-secondary" id="npt-cancel">${this._t("Cancel")}</button>
           <button class="npt-btn npt-btn-primary" id="npt-settings-save">${this._t("Save")}</button>
@@ -410,12 +398,6 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     overlay.querySelector("#npt-settings-save").addEventListener("click", () => {
       const chosenEngine = overlay.querySelector("input[name='npt-engine']:checked")?.value;
       if (chosenEngine) this._setSetting("npt-search-engine", chosenEngine);
-
-      const chosenZoom = overlay.querySelector("input[name='npt-zoom']:checked")?.value;
-      if (chosenZoom) this._setSetting("npt-map-zoom-mode", chosenZoom);
-
-      const chosenAnim = overlay.querySelector("input[name='npt-anim']:checked")?.value;
-      if (chosenAnim) this._setSetting("npt-transit-anim", chosenAnim);
 
       const posLostVal = parseInt(overlay.querySelector("#npt-possibly-lost")?.value || "3", 10);
       const lostVal    = parseInt(overlay.querySelector("#npt-lost")?.value || "5", 10);
@@ -829,30 +811,19 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   _renderRouteMap(state) {
     const coords = (state && state.attributes && state.attributes.route_coords) || [];
     if (coords.length === 0) return `<div class="map-empty">${this._t("No route data")}</div>`;
-    const active = this._activeStopCount();
-    const counts = [
-      { val: "2",   label: "2" },
-      { val: "5",   label: "5" },
-      { val: "10",  label: "10" },
-      { val: "all", label: this._isNo ? "Alle" : "All" },
-    ];
-    const btns = counts.map((c) =>
-      `<button class="map-ctrl-btn${c.val === active ? " active" : ""}" data-stops="${c.val}">${c.label}</button>`
-    ).join("");
     const no = this._isNo;
     return `
       <div class="map-block">
         <div class="map-controls">
-          <span class="map-ctrl-label">${no ? "Stopp:" : "Stops:"}</span>
-          ${btns}
+          <span class="map-ctrl-label" style="opacity:0.45">🌍 ${no ? "3D Globe" : "3D Globe"}</span>
           <div style="flex:1"></div>
-          <button class="map-act-btn" data-map-action="zoomin"    title="${no ? "Zoom inn" : "Zoom in"}">+</button>
-          <button class="map-act-btn" data-map-action="zoomout"   title="${no ? "Zoom ut" : "Zoom out"}">&minus;</button>
-          <button class="map-act-btn" data-map-action="fit"       title="${no ? "Tilpass kart" : "Fit to route"}">&#x229B;</button>
+          <button class="map-act-btn" data-map-action="zoomin"     title="${no ? "Zoom inn" : "Zoom in"}">+</button>
+          <button class="map-act-btn" data-map-action="zoomout"    title="${no ? "Zoom ut" : "Zoom out"}">&minus;</button>
+          <button class="map-act-btn" data-map-action="fit"        title="${no ? "Tilpass visning" : "Fit to route"}">&#x229B;</button>
           <button class="map-act-btn" data-map-action="screenshot" title="${no ? "Skjermbilde" : "Screenshot"}">&#x1F4F7;</button>
-          <button class="map-act-btn" data-map-action="expand"    title="${no ? "Fullvindu" : "Full window"}">&#x26F6;</button>
+          <button class="map-act-btn" data-map-action="expand"     title="${no ? "Fullvindu" : "Full window"}">&#x26F6;</button>
         </div>
-        <div class="map-frame"><div id="npt-route-map" class="leaflet-map-route"></div></div>
+        <div class="globe-map-frame"><div id="npt-route-map" class="globe-map-div"></div></div>
       </div>`;
   }
 
@@ -865,9 +836,15 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     const rows = this._buildParcelRows();
 
-    if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
-    if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
     if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
+    if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
+    if (this._globeInstance) {
+      try { this._globeInstance._nptResizeObserver?.disconnect(); } catch(e) {}
+      try { if (typeof this._globeInstance.pauseAnimation === "function") this._globeInstance.pauseAnimation(); } catch(e) {}
+      try { this._globeInstance.renderer().forceContextLoss(); this._globeInstance.renderer().dispose(); } catch(e) {}
+      this._globeInstance = null;
+    }
+    if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
 
     this._shadow.innerHTML = `
       <link rel="stylesheet" href="${_LEAFLET_CSS}">
@@ -915,13 +892,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         .map-block { position:relative; }
         .map-block.map-expanded { position:fixed; inset:0; z-index:9999; display:flex; flex-direction:column; background:var(--primary-background-color,#111); }
         .map-block.map-expanded .map-controls { flex-shrink:0; padding:6px 10px; border-bottom:1px solid var(--divider-color,#333); }
-        .map-block.map-expanded .map-frame, .map-block.map-expanded .map-frame-overview { flex:1; min-height:0; border:none; border-radius:0; box-shadow:none; margin:0; display:flex; flex-direction:column; }
-        .map-block.map-expanded .leaflet-map-route, .map-block.map-expanded .leaflet-map-overview { flex:1; height:auto !important; min-height:0; }
-        .map-frame { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; margin-bottom: 12px; background: #c8a96e; position: relative; }
+        .map-block.map-expanded .map-frame-overview { flex:1; min-height:0; border:none; border-radius:0; box-shadow:none; margin:0; display:flex; flex-direction:column; }
+        .map-block.map-expanded .leaflet-map-overview { flex:1; height:auto !important; min-height:0; }
         .map-frame-overview { border: 4px solid #5c3a1e; border-radius: 2px; box-shadow: inset 0 0 30px rgba(100,60,20,0.3), 0 4px 20px rgba(0,0,0,0.6); overflow: hidden; background: #c8a96e; }
-        .leaflet-map-route { height: 280px; width: 100%; display: block; }
         .leaflet-map-overview { height: calc(100vh - 198px); min-height: 260px; width: 100%; display: block; }
-        .leaflet-map-route .leaflet-tile-pane,
         .leaflet-map-overview .leaflet-tile-pane { filter: sepia(0.55) contrast(0.92) brightness(1.06) saturate(0.5) hue-rotate(6deg); }
         .leaflet-container { background: #c8a96e !important; }
         .leaflet-tile-pane { z-index: 2 !important; }
@@ -990,6 +964,12 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         @media (prefers-reduced-motion: reduce) {
           .parcel-row.status-pickup-ready { animation: none; background: rgba(255,152,0,0.14); }
         }
+        .globe-map-frame { border:1px solid rgba(79,195,247,0.2); border-radius:6px; box-shadow:0 0 30px rgba(0,0,0,0.9),inset 0 0 20px rgba(0,0,0,0.5); overflow:hidden; margin-bottom:12px; background:#000; position:relative; }
+        .globe-map-div { height:420px; width:100%; display:block; background:#000; }
+        .map-block.map-expanded .globe-map-div { flex:1; height:auto !important; min-height:0; }
+        .map-block.map-expanded .globe-map-frame { flex:1; min-height:0; border:none; border-radius:0; margin:0; display:flex; flex-direction:column; }
+        @keyframes npt-globe-pulse { 0%,100% { transform:scale(1); filter:brightness(1); } 50% { transform:scale(1.2); filter:brightness(1.4); } }
+        @media (prefers-reduced-motion: reduce) { @keyframes npt-globe-pulse { 0%,100% { transform:none; filter:none; } } }
       </style>
 
       <div class="panel-header">
@@ -1035,31 +1015,24 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       filterInp.addEventListener("input", () => this._filterParcels(filterInp.value));
     }
 
-    // Stop count toolbar — re-initializes route map in place (no full re-render)
-    this._shadow.querySelectorAll(".map-ctrl-btn[data-stops]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        this._setSetting("npt-map-stop-count", btn.dataset.stops);
-        this._shadow.querySelectorAll(".map-ctrl-btn[data-stops]").forEach((b) =>
-          b.classList.toggle("active", b === btn));
-        const wasExpanded = this._shadow.querySelector(".map-block.map-expanded") !== null;
-        if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
-        if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
-        const selState = this._selected ? this._parcels.find((s) => s.entity_id === this._selected) : null;
-        if (selState) this._initRouteMap(selState).then(() => {
-          if (wasExpanded && this._leafletMap) this._leafletMap.scrollWheelZoom.enable();
-        }).catch(() => {});
-      });
-    });
-
-    // Map action toolbar (zoom, fit, screenshot, expand)
+    // Map action toolbar (zoom, fit, screenshot, expand) — branches on globe vs Leaflet
     this._shadow.querySelectorAll("[data-map-action]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const a = btn.dataset.mapAction;
-        if (a === "zoomin")     this._leafletMap?.zoomIn();
-        if (a === "zoomout")    this._leafletMap?.zoomOut();
-        if (a === "fit")        { const m = this._leafletMap; if (m?._nptFitBounds) m.fitBounds(m._nptFitBounds, { padding: [30, 30] }); }
-        if (a === "screenshot") this._takeMapScreenshot();
-        if (a === "expand")     this._toggleMapExpanded();
+        const g = this._globeInstance;
+        if (g) {
+          if (a === "zoomin")     { const p = g.pointOfView(); g.pointOfView({ altitude: p.altitude * 0.7 }, 300); }
+          if (a === "zoomout")    { const p = g.pointOfView(); g.pointOfView({ altitude: p.altitude * 1.4 }, 300); }
+          if (a === "fit")        { if (g._nptRoutePov) g.pointOfView(g._nptRoutePov, 1200); }
+          if (a === "screenshot") this._takeGlobeScreenshot();
+          if (a === "expand")     this._toggleGlobeExpanded();
+        } else {
+          if (a === "zoomin")     this._leafletMap?.zoomIn();
+          if (a === "zoomout")    this._leafletMap?.zoomOut();
+          if (a === "fit")        { const m = this._leafletMap; if (m?._nptFitBounds) m.fitBounds(m._nptFitBounds, { padding: [30, 30] }); }
+          if (a === "screenshot") this._takeMapScreenshot();
+          if (a === "expand")     this._toggleMapExpanded();
+        }
       });
     });
 
@@ -1076,7 +1049,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
     if (selected) this._attachDetailPaneListeners(selected);
 
-    this._initLeafletMaps().catch(() => {});
+    this._initLeafletMaps().catch(e => console.warn("NPT map init failed:", e));
   }
 
   /** Wire click listeners on the detail pane buttons (rename, icon, refresh, notes). */
@@ -1101,11 +1074,17 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   connectedCallback() { this._render(); }
 
-  /** Clean up Leaflet map and global event listeners when element is removed from the DOM. */
+  /** Clean up map instances and global event listeners when element is removed from the DOM. */
   disconnectedCallback() {
-    if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
-    if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
     if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
+    if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
+    if (this._globeInstance) {
+      try { this._globeInstance._nptResizeObserver?.disconnect(); } catch(e) {}
+      try { if (typeof this._globeInstance.pauseAnimation === "function") this._globeInstance.pauseAnimation(); } catch(e) {}
+      try { this._globeInstance.renderer().forceContextLoss(); this._globeInstance.renderer().dispose(); } catch(e) {}
+      this._globeInstance = null;
+    }
+    if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
   }
 
   async _ensureLeaflet() {
@@ -1142,6 +1121,31 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     }
   }
 
+  /** Load the Globe.gl script once; concurrent callers wait on the same tag. */
+  async _ensureGlobeGL() {
+    if (window.Globe) return;
+    if (document.getElementById("npt-globe-js")) {
+      await new Promise((res) => {
+        const t = setInterval(() => { if (window.Globe) { clearInterval(t); res(); } }, 50);
+        setTimeout(() => {
+          clearInterval(t);
+          if (!window.Globe) console.warn("NPT: Globe.gl did not load within 10 s");
+          res();
+        }, 10000);
+      });
+      return;
+    }
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.id = "npt-globe-js";
+      s.src = _GLOBE_JS;
+      s.crossOrigin = "anonymous";
+      s.onload = resolve;
+      s.onerror = (e) => { console.warn("NPT: Globe.gl script load error", e); reject(e); };
+      document.head.appendChild(s);
+    });
+  }
+
   async _initLeafletMaps() {
     const selected = this._selected ? this._parcels.find((s) => s.entity_id === this._selected) : null;
     if (selected) {
@@ -1151,88 +1155,197 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     }
   }
 
+  /**
+   * Render the 3D Globe.gl route map for a single parcel.
+   * Historical legs are drawn as dim static lines; the future leg (last confirmed
+   * stop → home) is an animated dashed arc that shows the parcel is still en route.
+   */
   async _initRouteMap(state) {
     const mapDiv = this._shadow.getElementById("npt-route-map");
     if (!mapDiv) return;
     const coords = (state.attributes && state.attributes.route_coords) || [];
     if (coords.length === 0) return;
-    try { await this._ensureLeaflet(); } catch (e) { return; }
-    const L = window.L;
+    try { await this._ensureGlobeGL(); } catch (e) { return; }
+    // Bail if the parcel was deselected while the script was loading
+    if (!mapDiv.isConnected || !window.Globe) return;
 
-    const ordered = [...coords].reverse(); // oldest first
-    // Slice to the active stop count
-    const stopCount = this._activeStopCount();
-    const maxStops = stopCount === "all" ? ordered.length : Math.min(parseInt(stopCount, 10), ordered.length);
-    const visible = ordered.slice(-maxStops); // most-recent N stops, oldest-first
-    const latLngs = visible.map((c) => [c.lat, c.lng]);
+    const statusKey  = this._parcelStatusColor(state);
+    const arcColor   = this._statusLineColor(statusKey);
+    const curEmoji   = this._statusMarkerEmoji(statusKey, state.attributes.npt_icon || "");
 
-    const map = L.map(mapDiv, { zoomControl: false, scrollWheelZoom: false, attributionControl: true });
-    L.tileLayer(_CARTO_TILES, { attribution: _CARTO_ATTR, subdomains: "abc", maxZoom: 17, crossOrigin: "anonymous" }).addTo(map);
-    const fitBounds = L.latLngBounds(latLngs);
-    map.fitBounds(fitBounds, { padding: [40, 40] });
-    map._nptFitBounds = fitBounds;
-    this._leafletMap = map;
-
-    const statusKey   = this._parcelStatusColor(state);
-    const lineColor   = this._statusLineColor(statusKey);
-    const markerEmoji = this._statusMarkerEmoji(statusKey, state.attributes.npt_icon || "");
-
-    const dash = this._statusLineDash(statusKey);
-    const activeStatus = ["in-transit", "pickup-ready", "delayed"].includes(statusKey);
-    const lineOpts = { color: lineColor, weight: activeStatus ? 3.5 : 2.5, opacity: activeStatus ? 0.9 : 0.7 };
-    if (dash) lineOpts.dashArray = dash;
-    L.polyline(latLngs, lineOpts).addTo(map);
-
-    visible.slice(0, -1).forEach((c) => {
-      const tip = `${(c.date_iso || "").slice(0, 16).replace("T", " ")} — ${c.description || ""}`;
-      L.circleMarker([c.lat, c.lng], { radius: 5, color: lineColor, fillColor: lineColor, fillOpacity: 0.55, weight: 1.5 })
-        .bindTooltip(tip).addTo(map);
-    });
-
-    // Bearing calculated from the two most-recent coords (full coords, not sliced)
-    const cur = coords[0];
-    let bearing = 0;
-    if (coords.length >= 2) {
-      const dLat = coords[0].lat - coords[1].lat;
-      const dLng = coords[0].lng - coords[1].lng;
-      bearing = Math.atan2(dLng, dLat) * (180 / Math.PI);
+    // Build confirmed-leg arcs: origin → … → last known stop, all static + dim
+    const arcs = [];
+    for (let i = coords.length - 1; i > 0; i--) {
+      arcs.push({
+        startLat: coords[i].lat, startLng: coords[i].lng,
+        endLat:   coords[i - 1].lat, endLng: coords[i - 1].lng,
+        isFuture: false,
+      });
     }
-    const planeIcon = L.divIcon({
-      html: `<div class="npt-plane" style="transform:rotate(${bearing.toFixed(0)}deg)">${markerEmoji}</div>`,
-      className: "npt-plane-wrap",
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
+
+    // Future arc: last confirmed stop → home (shows parcel is "somewhere along this line")
+    const activeSt = ["in-transit", "delayed"].includes(statusKey);
+    const homeLat   = this._hass?.config?.latitude;
+    const homeLng   = this._hass?.config?.longitude;
+    const hasFutureArc = activeSt && homeLat != null && homeLng != null;
+    if (hasFutureArc) {
+      arcs.push({
+        startLat: coords[0].lat, startLng: coords[0].lng,
+        endLat: homeLat, endLng: homeLng,
+        isFuture: true,
+      });
+    }
+
+    // HTML markers for each confirmed stop, plus optional home marker
+    const self = this;
+    const markers = coords.map((c, i) => ({
+      lat: c.lat, lng: c.lng,
+      description: c.description || "",
+      dateIso: c.date_iso || "",
+      isCurrent: i === 0,
+      isOrigin:  i === coords.length - 1,
+      isHome: false,
+      cpInfo: self._checkpointInfo(c),
+    }));
+    if (hasFutureArc) {
+      markers.push({
+        lat: homeLat, lng: homeLng,
+        description: self._isNo ? "Hjem" : "Home",
+        dateIso: "",
+        isCurrent: false,
+        isOrigin: false,
+        isHome: true,
+        cpInfo: { icon: "🏠", color: "#66bb6a" },
+      });
+    }
+
+    // Camera target — midpoint of bounding box (including home if present), altitude scaled to span
+    const allLats = coords.map((c) => c.lat).concat(hasFutureArc ? [homeLat] : []);
+    const allLngs = coords.map((c) => c.lng).concat(hasFutureArc ? [homeLng] : []);
+    const midLat  = (Math.min(...allLats) + Math.max(...allLats)) / 2;
+    const midLng  = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
+    const span    = Math.max(Math.max(...allLats) - Math.min(...allLats), Math.max(...allLngs) - Math.min(...allLngs));
+    const altitude = Math.max(1.0, Math.min(3.5, span / 28));
+    const routePov = { lat: midLat, lng: midLng, altitude };
+
+    // preserveDrawingBuffer: true is required for canvas.toBlob() screenshot to work
+    const globe = new window.Globe(mapDiv, { animateIn: false, rendererConfig: { preserveDrawingBuffer: true } });
+    this._globeInstance = globe;
+    globe._nptRoutePov = routePov;
+
+    // Set explicit dimensions — Globe.gl defaults to window size, not container size
+    globe.width(mapDiv.clientWidth || mapDiv.offsetWidth).height(mapDiv.clientHeight || mapDiv.offsetHeight);
+
+    // Keep globe sized to its container on layout changes (e.g. expand)
+    const ro = new ResizeObserver(() => {
+      if (!self._globeInstance) return;
+      const w = mapDiv.offsetWidth;
+      const h = mapDiv.offsetHeight;
+      if (w && h) self._globeInstance.width(w).height(h);
     });
+    ro.observe(mapDiv);
+    globe._nptResizeObserver = ro;
 
-    // For in-transit parcels with a recent previous stop, animate the marker
-    // from coords[1] → coords[0] using an inline CSS transition.  The marker
-    // always ends at the confirmed last stop — no invented position.
-    // Only "in-transit" animates; pickup-ready and delayed stay static.
-    const animEnabled = this._getSetting("npt-transit-anim", "on") === "on";
-    const recentMs = 24 * 3600 * 1000;
-    const lastDate = cur.date_iso ? new Date(cur.date_iso).getTime() : 0;
-    const shouldAnimate = animEnabled && statusKey === "in-transit" &&
-                          coords.length >= 2 && (Date.now() - lastDate) < recentMs;
+    globe
+      .globeImageUrl(_GLOBE_EARTH_IMG)
+      .bumpImageUrl(_GLOBE_BUMP_IMG)
+      .backgroundImageUrl(_GLOBE_SPACE_IMG)
+      .showAtmosphere(true)
+      .atmosphereColor("rgba(63,169,245,0.3)")
+      .atmosphereAltitude(0.15)
+      // Future arc is bright + animated; confirmed historical legs are dim + static
+      .arcsData(arcs)
+      .arcStartLat("startLat").arcStartLng("startLng")
+      .arcEndLat("endLat").arcEndLng("endLng")
+      .arcColor((d) => d.isFuture ? arcColor : arcColor + "44")
+      .arcDashLength((d) => d.isFuture ? 0.2 : 1.0)
+      .arcDashGap((d) => d.isFuture ? 0.3 : 0.0)
+      .arcDashInitialGap(0)
+      .arcDashAnimateTime((d) => d.isFuture ? 2000 : 0)
+      .arcStroke(0.8)
+      .arcAltitudeAutoScale(0.2)
+      // HTML markers at each stop
+      .htmlElementsData(markers)
+      .htmlLat("lat")
+      .htmlLng("lng")
+      .htmlAltitude(0.01)
+      .htmlElement((d) => {
+        const el = document.createElement("div");
+        el.style.cssText = "pointer-events:auto;display:flex;flex-direction:column;align-items:center;";
+        if (d.isCurrent) {
+          // Current position: pulsing badge (keyframes are in shadow DOM <style>)
+          const badge = document.createElement("div");
+          badge.title = d.description;
+          badge.style.cssText =
+            `background:rgba(0,0,0,0.75);border:2px solid ${arcColor};border-radius:50%;`+
+            `width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:18px;`+
+            `box-shadow:0 0 10px ${arcColor},0 0 24px ${arcColor}44;`+
+            `animation:npt-globe-pulse 2s ease-in-out infinite;`;
+          badge.textContent = curEmoji;
+          const lbl = document.createElement("div");
+          lbl.style.cssText =
+            `font-size:9px;color:${arcColor};background:rgba(0,0,0,0.7);`+
+            `padding:1px 4px;border-radius:2px;margin-top:2px;white-space:nowrap;`;
+          lbl.textContent = (d.dateIso || "").slice(0, 10);
+          el.appendChild(badge);
+          el.appendChild(lbl);
+        } else {
+          const ci = d.cpInfo;
+          const dot = document.createElement("div");
+          dot.title = d.description;
+          dot.style.cssText =
+            `background:rgba(0,0,0,0.7);border:1px solid ${ci.color}55;border-radius:50%;`+
+            `width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;`+
+            `box-shadow:0 0 4px rgba(0,0,0,0.9);`;
+          dot.textContent = ci.icon;
+          el.appendChild(dot);
+          if (d.isOrigin) {
+            const orig = document.createElement("div");
+            orig.style.cssText =
+              `font-size:8px;color:rgba(255,255,255,0.5);background:rgba(0,0,0,0.65);`+
+              `padding:1px 3px;border-radius:2px;margin-top:1px;white-space:nowrap;`;
+            orig.textContent = self._isNo ? "Avsender" : "Origin";
+            el.appendChild(orig);
+          }
+          if (d.isHome) {
+            const lbl = document.createElement("div");
+            lbl.style.cssText =
+              `font-size:8px;color:#66bb6a;background:rgba(0,0,0,0.65);`+
+              `padding:1px 3px;border-radius:2px;margin-top:1px;white-space:nowrap;`;
+            lbl.textContent = self._isNo ? "Hjem" : "Home";
+            el.appendChild(lbl);
+          }
+        }
+        return el;
+      });
 
-    const startLatLng = shouldAnimate ? [coords[1].lat, coords[1].lng] : [cur.lat, cur.lng];
-    const marker = L.marker(startLatLng, { icon: planeIcon })
-      .bindTooltip(`${(cur.date_iso || "").slice(0, 16).replace("T", " ")} — ${cur.description || ""}`)
-      .addTo(map);
-
-    if (shouldAnimate) {
-      // Set transition inline (shadow DOM; document.head styles don't reach here).
-      // A second timer clears it so zooming doesn't re-trigger the slide.
+    // Intro: 3-second auto-rotate then fly in; skipped under prefers-reduced-motion
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) {
+      globe.controls().autoRotate = false;
+      globe.pointOfView(routePov, 0);
+    } else {
+      globe.controls().autoRotate = true;
+      globe.controls().autoRotateSpeed = 1.8;
+      globe.pointOfView({ lat: 20, lng: 10, altitude: 3.5 });
       this._animTimeout = setTimeout(() => {
-        const el = marker.getElement();
-        if (!el) { this._animTimeout = null; return; }
-        el.style.transition = "transform 4s ease-in-out";
-        marker.setLatLng([cur.lat, cur.lng]);
-        this._animTimeout = setTimeout(() => {
-          el.style.transition = "";
-          this._animTimeout = null;
-        }, 4100);
-      }, 50);
+        this._animTimeout = null;
+        if (!this._globeInstance) return;
+        globe.controls().autoRotate = false;
+        globe.pointOfView(routePov, 2500);
+      }, 3000);
     }
+  }
+
+  /** Classify a route coordinate into a checkpoint type for globe marker styling. */
+  _checkpointInfo(c) {
+    const desc = ((c.description || "") + " " + (c.location || "")).toLowerCase();
+    if (/customs|border|import|export|clearance|toll/.test(desc))           return { icon: "🛃", color: "#ff9800" };
+    if (/airport|air.?hub|departure|arrival|airline|terminal.{0,6}air/.test(desc)) return { icon: "✈️", color: "#4fc3f7" };
+    if (/sort|warehouse|center|hub|facility|depot|logistics/.test(desc))    return { icon: "🏭", color: "#80cbc4" };
+    if (/deliver|courier|local|final|last.?mile/.test(desc))                return { icon: "🚚", color: "#a5d6a7" };
+    if (/post|postal|mail/.test(desc))                                       return { icon: "📮", color: "#ce93d8" };
+    return { icon: "📍", color: "#90a4ae" };
   }
 
   async _initOverviewMap(parcels) {
@@ -1283,8 +1396,9 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         const dLng = p.coords[0].lng - p.coords[1].lng;
         bearing = Math.atan2(dLng, dLat) * (180 / Math.PI);
       }
+      const safeLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const icon = L.divIcon({
-        html: `<div style="transform:rotate(${bearing.toFixed(0)}deg);font-size:20px;line-height:1">${label}</div>`,
+        html: `<div style="transform:rotate(${bearing.toFixed(0)}deg);font-size:20px;line-height:1">${safeLabel}</div>`,
         className: "npt-plane-wrap",
         iconSize: [26, 26],
         iconAnchor: [13, 13],
@@ -1400,6 +1514,51 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
     }
     requestAnimationFrame(() => map.invalidateSize());
+  }
+
+  /** Download a PNG of the Globe.gl 3D route view. */
+  _takeGlobeScreenshot() {
+    if (!this._globeInstance) return;
+    try {
+      const canvas = this._globeInstance.renderer().domElement;
+      canvas.toBlob((blob) => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "parcel-globe.png";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 2000);
+      });
+    } catch (e) {
+      console.warn("NPT globe screenshot:", e);
+    }
+  }
+
+  /** Toggle the globe container between normal and full-viewport. */
+  _toggleGlobeExpanded() {
+    const mapDiv = this._shadow.getElementById("npt-route-map");
+    if (!mapDiv || !this._globeInstance) return;
+    const block = mapDiv.closest(".map-block");
+    if (!block) return;
+    const expanding = !block.classList.contains("map-expanded");
+    block.classList.toggle("map-expanded", expanding);
+    block.querySelectorAll("[data-map-action='expand']").forEach((btn) => {
+      btn.textContent = expanding ? "✕" : "⛶";
+      btn.title = expanding ? (this._isNo ? "Lukk" : "Close") : (this._isNo ? "Fullvindu" : "Full window");
+    });
+    if (expanding) {
+      this._mapEscHandler = (e) => { if (e.key === "Escape") this._toggleGlobeExpanded(); };
+      document.addEventListener("keydown", this._mapEscHandler);
+    } else {
+      if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
+    }
+    // Let Globe.gl's ResizeObserver detect the new size; nudge it with width/height if needed
+    requestAnimationFrame(() => {
+      if (!this._globeInstance) return;
+      const w = mapDiv.offsetWidth;
+      const h = mapDiv.offsetHeight;
+      if (w && h) this._globeInstance.width(w).height(h);
+    });
   }
 }
 
