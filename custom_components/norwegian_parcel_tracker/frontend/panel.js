@@ -70,9 +70,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this._parcels = Object.values(hass.states).filter(
-      (s) => s.attributes && s.attributes.npt_master_entity === true
-    );
+    this._parcels = Object.values(hass.states).filter((s) => {
+      if (!s.attributes || s.attributes.npt_master_entity !== true) return false;
+      return true;
+    });
     // Panel already rendered — update only the table rows, never the map
     if (this._shadow.getElementById("npt-panel-body")) {
       this._patchParcelRows();
@@ -818,9 +819,6 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         <div class="map-controls">
           <span class="map-ctrl-label" style="opacity:0.45">🗺️ ${no ? "Kart" : "Route map"}</span>
           <div style="flex:1"></div>
-          <button class="map-act-btn" data-map-action="zoomin"     title="${no ? "Zoom inn" : "Zoom in"}">+</button>
-          <button class="map-act-btn" data-map-action="zoomout"    title="${no ? "Zoom ut" : "Zoom out"}">&minus;</button>
-          <button class="map-act-btn" data-map-action="fit"        title="${no ? "Tilpass visning" : "Fit to route"}">&#x229B;</button>
           <button class="map-act-btn" data-map-action="screenshot" title="${no ? "Skjermbilde" : "Screenshot"}">&#x1F4F7;</button>
           <button class="map-act-btn" data-map-action="expand"     title="${no ? "Fullvindu" : "Full window"}">&#x26F6;</button>
         </div>
@@ -1188,11 +1186,25 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const minSpan = 15;
     if (latMax - latMin < minSpan) { const c = (latMax+latMin)/2; latMin = c-minSpan/2; latMax = c+minSpan/2; }
     if (lonMax - lonMin < minSpan) { const c = (lonMax+lonMin)/2; lonMin = c-minSpan/2; lonMax = c+minSpan/2; }
-    // 25% padding
+    // 25% padding, then enforce 2:1 aspect ratio (W/H = 1000/500) so the map isn't
+    // stretched: widen the smaller range about its centre until lonRange = 2 × latRange.
     const latPad = (latMax-latMin)*0.25, lonPad = (lonMax-lonMin)*0.25;
-    latMin = Math.max(-85, latMin-latPad); latMax = Math.min(85,  latMax+latPad);
-    lonMin = Math.max(-180, lonMin-lonPad); lonMax = Math.min(180, lonMax+lonPad);
-    const latRange = latMax-latMin, lonRange = lonMax-lonMin;
+    latMin -= latPad; latMax += latPad;
+    lonMin -= lonPad; lonMax += lonPad;
+    let latRange = latMax-latMin, lonRange = lonMax-lonMin;
+    if (lonRange < 2 * latRange) {
+      const extra = (2 * latRange - lonRange) / 2;
+      lonMin -= extra; lonMax += extra; lonRange = lonMax - lonMin;
+    } else if (latRange < lonRange / 2) {
+      const extra = (lonRange / 2 - latRange) / 2;
+      latMin -= extra; latMax += extra; latRange = latMax - latMin;
+    }
+    // Shift window into bounds without changing its size
+    if (lonMin < -180) { lonMax -= (lonMin + 180); lonMin = -180; }
+    if (lonMax >  180) { lonMin += (lonMax - 180); lonMax =  180; }
+    if (latMin <  -85) { latMax -= (latMin + 85);  latMin =  -85; }
+    if (latMax >   85) { latMin += (latMax - 85);  latMax =   85; }
+    lonRange = lonMax - lonMin; latRange = latMax - latMin;
     const proj = (lat, lng) => ({
       x: (lng - lonMin) / lonRange * W,
       y: (latMax - lat) / latRange * H,
@@ -1220,14 +1232,17 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       futureD = `M${cp.x.toFixed(1)},${cp.y.toFixed(1)} L${hp.x.toFixed(1)},${hp.y.toFixed(1)}`;
     }
 
-    // Deduplicate consecutive markers at the same projected position
+    // Deduplicate markers at the same projected position, newest-wins.
+    // routePts is oldest-first (coords is reversed), so iterating backward and
+    // keeping the first occurrence per key selects the newest (highest-index) point.
     const confirmedCount = coords.length;
-    const seenPts = new Set();
+    const keepIdx = new Set(), _seenDedup = new Set();
+    for (let i = routePts.length - 1; i >= 0; i--) {
+      const p = proj(routePts[i].lat, routePts[i].lng), k = `${p.x.toFixed(0)},${p.y.toFixed(0)}`;
+      if (!_seenDedup.has(k)) { _seenDedup.add(k); keepIdx.add(i); }
+    }
     const markerSvg = routePts.map((pt, i) => {
-      const p   = proj(pt.lat, pt.lng);
-      const key = `${p.x.toFixed(0)},${p.y.toFixed(0)}`;
-      if (seenPts.has(key)) return "";
-      seenPts.add(key);
+      if (!keepIdx.has(i)) return "";
       const ci  = this._checkpointInfo(pt);
       const isCurrentStop = !pt.isHome && i === confirmedCount - 1;
       const isOrigin = i === 0;
@@ -1564,14 +1579,19 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const svg = this._shadow.getElementById("npt-board-svg");
     if (!svg) return;
     try {
-      const xml  = new XMLSerializer().serializeToString(svg);
+      // Clone with explicit pixel size so the Image element has intrinsic dimensions.
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("width",  "1000");
+      clone.setAttribute("height", "500");
+      clone.removeAttribute("style");
+      const xml  = new XMLSerializer().serializeToString(clone);
       const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
       const url  = URL.createObjectURL(blob);
       const img  = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
         canvas.width = 1000; canvas.height = 500;
-        canvas.getContext("2d").drawImage(img, 0, 0);
+        canvas.getContext("2d").drawImage(img, 0, 0, 1000, 500);
         URL.revokeObjectURL(url);
         canvas.toBlob((pngBlob) => {
           const a = document.createElement("a");
