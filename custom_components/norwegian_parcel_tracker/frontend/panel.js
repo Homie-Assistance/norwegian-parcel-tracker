@@ -39,11 +39,8 @@ const _CARTO_ATTR = "Kartendaten: &copy; <a href='https://openstreetmap.org/copy
 const _LEAFLET_CSS = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
 const _LEAFLET_JS  = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
 
-const _GLOBE_JS        = "https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js";
-// Textures ship in three-globe (globe.gl's peer dep), not in the globe.gl package itself
-const _GLOBE_EARTH_IMG = "https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/earth-night.jpg";
-const _GLOBE_BUMP_IMG  = "https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/earth-topology.png";
-const _GLOBE_SPACE_IMG = "https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/night-sky.png";
+const _TOPOJSON_JS    = "https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js";
+const _WORLD_TOPO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json";
 
 class NorwegianParcelTrackerPanel extends HTMLElement {
   constructor() {
@@ -54,7 +51,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     this._filterText = "";
     this._shadow = this.attachShadow({ mode: "open" });
     this._leafletMap = null;
-    this._globeInstance = null;
+    this._planeAnimId = null;
     this._animTimeout = null;
     const nav = (navigator.language || "").toLowerCase();
     const navIsNo = nav.startsWith("nb") || nav.startsWith("no") || nav.startsWith("nn");
@@ -66,6 +63,10 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   }
 
   _t(k) { return (this._isNo && _NO[k]) ? _NO[k] : k; }
+
+  _escapeHtml(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
 
   set hass(hass) {
     this._hass = hass;
@@ -815,7 +816,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     return `
       <div class="map-block">
         <div class="map-controls">
-          <span class="map-ctrl-label" style="opacity:0.45">🌍 ${no ? "3D Globe" : "3D Globe"}</span>
+          <span class="map-ctrl-label" style="opacity:0.45">🗺️ ${no ? "Kart" : "Route map"}</span>
           <div style="flex:1"></div>
           <button class="map-act-btn" data-map-action="zoomin"     title="${no ? "Zoom inn" : "Zoom in"}">+</button>
           <button class="map-act-btn" data-map-action="zoomout"    title="${no ? "Zoom ut" : "Zoom out"}">&minus;</button>
@@ -823,7 +824,7 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
           <button class="map-act-btn" data-map-action="screenshot" title="${no ? "Skjermbilde" : "Screenshot"}">&#x1F4F7;</button>
           <button class="map-act-btn" data-map-action="expand"     title="${no ? "Fullvindu" : "Full window"}">&#x26F6;</button>
         </div>
-        <div class="globe-map-frame"><div id="npt-route-map" class="globe-map-div"></div></div>
+        <div class="board-map-frame"><div id="npt-route-map" class="board-map-div"></div></div>
       </div>`;
   }
 
@@ -837,13 +838,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const rows = this._buildParcelRows();
 
     if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
+    if (this._planeAnimId) { cancelAnimationFrame(this._planeAnimId); this._planeAnimId = null; }
     if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
-    if (this._globeInstance) {
-      try { this._globeInstance._nptResizeObserver?.disconnect(); } catch(e) {}
-      try { if (typeof this._globeInstance.pauseAnimation === "function") this._globeInstance.pauseAnimation(); } catch(e) {}
-      try { this._globeInstance.renderer().forceContextLoss(); this._globeInstance.renderer().dispose(); } catch(e) {}
-      this._globeInstance = null;
-    }
     if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
 
     this._shadow.innerHTML = `
@@ -964,12 +960,12 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
         @media (prefers-reduced-motion: reduce) {
           .parcel-row.status-pickup-ready { animation: none; background: rgba(255,152,0,0.14); }
         }
-        .globe-map-frame { border:1px solid rgba(79,195,247,0.2); border-radius:6px; box-shadow:0 0 30px rgba(0,0,0,0.9),inset 0 0 20px rgba(0,0,0,0.5); overflow:hidden; margin-bottom:12px; background:#000; position:relative; }
-        .globe-map-div { height:420px; width:100%; display:block; background:#000; }
-        .map-block.map-expanded .globe-map-div { flex:1; height:auto !important; min-height:0; }
-        .map-block.map-expanded .globe-map-frame { flex:1; min-height:0; border:none; border-radius:0; margin:0; display:flex; flex-direction:column; }
-        @keyframes npt-globe-pulse { 0%,100% { transform:scale(1); filter:brightness(1); } 50% { transform:scale(1.2); filter:brightness(1.4); } }
-        @media (prefers-reduced-motion: reduce) { @keyframes npt-globe-pulse { 0%,100% { transform:none; filter:none; } } }
+        .board-map-frame { border:3px solid #7A5020; border-radius:4px; box-shadow:0 2px 20px rgba(0,0,0,0.6); overflow:hidden; margin-bottom:12px; background:#E8D9BC; position:relative; }
+        .board-map-div { width:100%; display:block; }
+        .board-map-div svg { display:block; width:100%; height:auto; }
+        .map-block.map-expanded .board-map-div { flex:1; min-height:0; display:flex; flex-direction:column; }
+        .map-block.map-expanded .board-map-frame { flex:1; min-height:0; border:none; border-radius:0; margin:0; display:flex; flex-direction:column; }
+        .map-block.map-expanded .board-map-div svg { flex:1; height:100% !important; width:100%; }
       </style>
 
       <div class="panel-header">
@@ -1015,17 +1011,15 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       filterInp.addEventListener("input", () => this._filterParcels(filterInp.value));
     }
 
-    // Map action toolbar (zoom, fit, screenshot, expand) — branches on globe vs Leaflet
+    // Map action toolbar — branches on board map (selected parcel) vs Leaflet overview
     this._shadow.querySelectorAll("[data-map-action]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const a = btn.dataset.mapAction;
-        const g = this._globeInstance;
-        if (g) {
-          if (a === "zoomin")     { const p = g.pointOfView(); g.pointOfView({ altitude: p.altitude * 0.7 }, 300); }
-          if (a === "zoomout")    { const p = g.pointOfView(); g.pointOfView({ altitude: p.altitude * 1.4 }, 300); }
-          if (a === "fit")        { if (g._nptRoutePov) g.pointOfView(g._nptRoutePov, 1200); }
-          if (a === "screenshot") this._takeGlobeScreenshot();
-          if (a === "expand")     this._toggleGlobeExpanded();
+        const hasBoardMap = !!this._selected;
+        if (hasBoardMap) {
+          if (a === "screenshot") this._takeBoardMapScreenshot();
+          if (a === "expand")     this._toggleBoardMapExpanded();
+          // zoom/fit not applicable to flat SVG map
         } else {
           if (a === "zoomin")     this._leafletMap?.zoomIn();
           if (a === "zoomout")    this._leafletMap?.zoomOut();
@@ -1077,13 +1071,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   /** Clean up map instances and global event listeners when element is removed from the DOM. */
   disconnectedCallback() {
     if (this._animTimeout) { clearTimeout(this._animTimeout); this._animTimeout = null; }
+    if (this._planeAnimId) { cancelAnimationFrame(this._planeAnimId); this._planeAnimId = null; }
     if (this._leafletMap) { try { this._leafletMap.remove(); } catch(e){} this._leafletMap = null; }
-    if (this._globeInstance) {
-      try { this._globeInstance._nptResizeObserver?.disconnect(); } catch(e) {}
-      try { if (typeof this._globeInstance.pauseAnimation === "function") this._globeInstance.pauseAnimation(); } catch(e) {}
-      try { this._globeInstance.renderer().forceContextLoss(); this._globeInstance.renderer().dispose(); } catch(e) {}
-      this._globeInstance = null;
-    }
     if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
   }
 
@@ -1121,30 +1110,33 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     }
   }
 
-  /** Load the Globe.gl script once; concurrent callers wait on the same tag. */
-  async _ensureGlobeGL() {
-    if (window.Globe) return;
-    if (document.getElementById("npt-globe-js")) {
-      await new Promise((res) => {
-        const t = setInterval(() => { if (window.Globe) { clearInterval(t); res(); } }, 50);
-        setTimeout(() => {
-          clearInterval(t);
-          if (!window.Globe) console.warn("NPT: Globe.gl did not load within 10 s");
-          res();
-        }, 10000);
-      });
-      return;
+  /** Load topojson-client and world-atlas topology; both cached on window. */
+  async _ensureBoardMapDeps() {
+    if (!window.topojson) {
+      if (!document.getElementById("npt-topojson-js")) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.id = "npt-topojson-js";
+          s.src = _TOPOJSON_JS;
+          s.integrity = "sha384-9dCJK6nh7skY14HrcvlLYlFga9/MehJjL9ONWRflmiXNRuf8p2jiF4Y5PR881PTq";
+          s.crossOrigin = "anonymous";
+          s.onload = resolve;
+          s.onerror = (e) => { console.warn("NPT: topojson load error", e); reject(e); };
+          document.head.appendChild(s);
+        });
+      } else {
+        await new Promise((res) => {
+          const t = setInterval(() => { if (window.topojson) { clearInterval(t); res(); } }, 50);
+          setTimeout(() => { clearInterval(t); res(); }, 8000);
+        });
+      }
     }
-    await new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.id = "npt-globe-js";
-      s.src = _GLOBE_JS;
-      s.integrity = "sha384-1uolMBZ25k3zJcNwCLEv49+L+m2dZudqAzsoSAJfQTzDCSBxJzrMuZ2dkp/5JKiT";
-      s.crossOrigin = "anonymous";
-      s.onload = resolve;
-      s.onerror = (e) => { console.warn("NPT: Globe.gl script load error", e); reject(e); };
-      document.head.appendChild(s);
-    });
+    if (!window._nptWorldTopo) {
+      const resp = await fetch(_WORLD_TOPO_URL);
+      if (!resp.ok) throw new Error(`NPT: world topo ${resp.status}`);
+      window._nptWorldTopo = await resp.json();
+    }
+    return window._nptWorldTopo;
   }
 
   async _initLeafletMaps() {
@@ -1157,203 +1149,233 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
   }
 
   /**
-   * Render the 3D Globe.gl route map for a single parcel.
-   * Historical legs are drawn as dim static lines; the future leg (last confirmed
-   * stop → home) is an animated dashed arc that shows the parcel is still en route.
+   * Render the board-game-style flat world route map for a single parcel.
+   * Uses a zoomed equirectangular SVG projection fitted to the route bounding box,
+   * topojson world shapes, Ticket-to-Ride-style thick dashed routes, and an
+   * animated paper-plane icon travelling along the journey.
    */
   async _initRouteMap(state) {
     const mapDiv = this._shadow.getElementById("npt-route-map");
     if (!mapDiv) return;
     const coords = (state.attributes && state.attributes.route_coords) || [];
     if (coords.length === 0) return;
-    try { await this._ensureGlobeGL(); } catch (e) { return; }
-    // Bail if the parcel was deselected while the script was loading
-    if (!mapDiv.isConnected || !window.Globe) return;
 
-    const statusKey  = this._parcelStatusColor(state);
-    const arcColor   = this._statusLineColor(statusKey);
-    const curEmoji   = this._statusMarkerEmoji(statusKey, state.attributes.npt_icon || "");
-
-    // Build confirmed-leg arcs: origin → … → last known stop, all static + dim
-    const arcs = [];
-    for (let i = coords.length - 1; i > 0; i--) {
-      arcs.push({
-        startLat: coords[i].lat, startLng: coords[i].lng,
-        endLat:   coords[i - 1].lat, endLng: coords[i - 1].lng,
-        isFuture: false,
-      });
-    }
-
-    // Future arc: last confirmed stop → home (shows parcel is "somewhere along this line")
-    const activeSt = ["in-transit", "delayed"].includes(statusKey);
-    const homeLat   = this._hass?.config?.latitude;
-    const homeLng   = this._hass?.config?.longitude;
+    const statusKey    = this._parcelStatusColor(state);
+    const arcColor     = this._statusLineColor(statusKey);
+    const curEmoji     = this._statusMarkerEmoji(statusKey, state.attributes.npt_icon || "");
+    const activeSt     = ["in-transit", "delayed"].includes(statusKey);
+    const homeLat      = this._hass?.config?.latitude;
+    const homeLng      = this._hass?.config?.longitude;
     const hasFutureArc = activeSt && homeLat != null && homeLng != null;
-    if (hasFutureArc) {
-      arcs.push({
-        startLat: coords[0].lat, startLng: coords[0].lng,
-        endLat: homeLat, endLng: homeLng,
-        isFuture: true,
-      });
-    }
-
-    // HTML markers for each confirmed stop, plus optional home marker
-    const self = this;
-    const markers = coords.map((c, i) => ({
-      lat: c.lat, lng: c.lng,
-      description: c.description || "",
-      dateIso: c.date_iso || "",
-      isCurrent: i === 0,
-      isOrigin:  i === coords.length - 1,
-      isHome: false,
-      cpInfo: self._checkpointInfo(c),
-    }));
-    if (hasFutureArc) {
-      markers.push({
-        lat: homeLat, lng: homeLng,
-        description: self._isNo ? "Hjem" : "Home",
-        dateIso: "",
-        isCurrent: false,
-        isOrigin: false,
-        isHome: true,
-        cpInfo: { icon: "🏠", color: "#66bb6a" },
-      });
-    }
-
-    // Camera target — midpoint of bounding box (including home if present), altitude scaled to span
-    const allLats = coords.map((c) => c.lat).concat(hasFutureArc ? [homeLat] : []);
-    const allLngs = coords.map((c) => c.lng).concat(hasFutureArc ? [homeLng] : []);
-    const midLat  = (Math.min(...allLats) + Math.max(...allLats)) / 2;
-    const midLng  = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
-    const span    = Math.max(Math.max(...allLats) - Math.min(...allLats), Math.max(...allLngs) - Math.min(...allLngs));
-    const altitude = Math.max(1.0, Math.min(3.5, span / 28));
-    const routePov = { lat: midLat, lng: midLng, altitude };
-
-    // preserveDrawingBuffer: true is required for canvas.toBlob() screenshot to work
-    const globe = new window.Globe(mapDiv, { animateIn: false, rendererConfig: { preserveDrawingBuffer: true } });
-    this._globeInstance = globe;
-    globe._nptRoutePov = routePov;
-
-    // Set explicit dimensions — Globe.gl defaults to window size, not container size
-    globe.width(mapDiv.clientWidth || mapDiv.offsetWidth).height(mapDiv.clientHeight || mapDiv.offsetHeight);
-
-    // Keep globe sized to its container on layout changes (e.g. expand)
-    const ro = new ResizeObserver(() => {
-      if (!self._globeInstance) return;
-      const w = mapDiv.offsetWidth;
-      const h = mapDiv.offsetHeight;
-      if (w && h) self._globeInstance.width(w).height(h);
-    });
-    ro.observe(mapDiv);
-    globe._nptResizeObserver = ro;
-
-    globe
-      .globeImageUrl(_GLOBE_EARTH_IMG)
-      .bumpImageUrl(_GLOBE_BUMP_IMG)
-      .backgroundImageUrl(_GLOBE_SPACE_IMG)
-      .showAtmosphere(true)
-      .atmosphereColor("rgba(63,169,245,0.3)")
-      .atmosphereAltitude(0.15)
-      // Future arc is bright + animated; confirmed historical legs are dim + static
-      .arcsData(arcs)
-      .arcStartLat("startLat").arcStartLng("startLng")
-      .arcEndLat("endLat").arcEndLng("endLng")
-      .arcColor((d) => d.isFuture ? arcColor : arcColor + "cc")
-      .arcDashLength((d) => d.isFuture ? 0.2 : 1.0)
-      .arcDashGap((d) => d.isFuture ? 0.3 : 0.0)
-      .arcDashInitialGap(0)
-      .arcDashAnimateTime((d) => d.isFuture ? 2000 : 0)
-      .arcStroke(0.25)
-      .arcAltitudeAutoScale(0.25)
-      .arcsTransitionDuration(0)
-      // HTML markers at each stop
-      .htmlElementsData(markers)
-      .htmlLat("lat")
-      .htmlLng("lng")
-      .htmlAltitude(0.01)
-      .htmlElement((d) => {
-        const el = document.createElement("div");
-        el.style.cssText = "pointer-events:auto;display:flex;flex-direction:column;align-items:center;";
-        if (d.isCurrent) {
-          // Current position: pulsing badge (keyframes are in shadow DOM <style>)
-          const badge = document.createElement("div");
-          badge.title = d.description;
-          badge.style.cssText =
-            `background:rgba(0,0,0,0.75);border:2px solid ${arcColor};border-radius:50%;`+
-            `width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:18px;`+
-            `box-shadow:0 0 10px ${arcColor},0 0 24px ${arcColor}44;`+
-            `animation:npt-globe-pulse 2s ease-in-out infinite;`;
-          badge.textContent = curEmoji;
-          const lbl = document.createElement("div");
-          lbl.style.cssText =
-            `font-size:9px;color:${arcColor};background:rgba(0,0,0,0.7);`+
-            `padding:1px 4px;border-radius:2px;margin-top:2px;white-space:nowrap;`;
-          lbl.textContent = (d.dateIso || "").slice(0, 10);
-          el.appendChild(badge);
-          el.appendChild(lbl);
-        } else {
-          const ci = d.cpInfo;
-          const dot = document.createElement("div");
-          dot.title = d.description;
-          dot.style.cssText =
-            `background:rgba(0,0,0,0.7);border:1px solid ${ci.color}55;border-radius:50%;`+
-            `width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;`+
-            `box-shadow:0 0 4px rgba(0,0,0,0.9);`;
-          dot.textContent = ci.icon;
-          el.appendChild(dot);
-          if (d.isOrigin) {
-            const orig = document.createElement("div");
-            orig.style.cssText =
-              `font-size:8px;color:rgba(255,255,255,0.5);background:rgba(0,0,0,0.65);`+
-              `padding:1px 3px;border-radius:2px;margin-top:1px;white-space:nowrap;`;
-            orig.textContent = self._isNo ? "Avsender" : "Origin";
-            el.appendChild(orig);
-          }
-          if (d.isHome) {
-            const lbl = document.createElement("div");
-            lbl.style.cssText =
-              `font-size:8px;color:#66bb6a;background:rgba(0,0,0,0.65);`+
-              `padding:1px 3px;border-radius:2px;margin-top:1px;white-space:nowrap;`;
-            lbl.textContent = self._isNo ? "Hjem" : "Home";
-            el.appendChild(lbl);
-          }
-        }
-        return el;
-      });
-
-    // Intro: 3-second auto-rotate then fly in; skipped under prefers-reduced-motion
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion) {
-      globe.controls().autoRotate = false;
-      globe.pointOfView(routePov, 0);
-    } else {
-      globe.controls().autoRotate = true;
-      globe.controls().autoRotateSpeed = 1.8;
-      globe.pointOfView({ lat: 20, lng: 10, altitude: 3.5 });
-      this._animTimeout = setTimeout(() => {
-        this._animTimeout = null;
-        if (!this._globeInstance) return;
-        globe.controls().autoRotate = false;
-        globe.pointOfView(routePov, 1500);
-      }, 2700);
+
+    // Route points oldest-first; optionally append home as destination
+    const routePts = [...coords].reverse();
+    if (hasFutureArc) routePts.push({ lat: homeLat, lng: homeLng, description: this._isNo ? "Hjem" : "Home", isHome: true });
+
+    let world = null;
+    try { world = await this._ensureBoardMapDeps(); } catch(e) { console.warn("NPT board map deps:", e); }
+    if (!mapDiv.isConnected) return;
+
+    const W = 1000, H = 500;
+
+    // --- Zoomed equirectangular projection fitted to route bounding box ---
+    const allLats = routePts.map(p => p.lat);
+    const allLngs = routePts.map(p => p.lng);
+    let latMin = Math.min(...allLats), latMax = Math.max(...allLats);
+    let lonMin = Math.min(...allLngs), lonMax = Math.max(...allLngs);
+    // Enforce a minimum 15° window so domestic routes show regional context
+    const minSpan = 15;
+    if (latMax - latMin < minSpan) { const c = (latMax+latMin)/2; latMin = c-minSpan/2; latMax = c+minSpan/2; }
+    if (lonMax - lonMin < minSpan) { const c = (lonMax+lonMin)/2; lonMin = c-minSpan/2; lonMax = c+minSpan/2; }
+    // 25% padding
+    const latPad = (latMax-latMin)*0.25, lonPad = (lonMax-lonMin)*0.25;
+    latMin = Math.max(-85, latMin-latPad); latMax = Math.min(85,  latMax+latPad);
+    lonMin = Math.max(-180, lonMin-lonPad); lonMax = Math.min(180, lonMax+lonPad);
+    const latRange = latMax-latMin, lonRange = lonMax-lonMin;
+    const proj = (lat, lng) => ({
+      x: (lng - lonMin) / lonRange * W,
+      y: (latMax - lat) / latRange * H,
+    });
+
+    // Build SVG continent paths using the zoomed projection
+    let landD = "", borderD = "";
+    if (world && window.topojson) {
+      try {
+        const landFeat = window.topojson.feature(world, world.objects.land);
+        landD   = this._geoToSvgPath(landFeat.geometry || landFeat, proj);
+        const borders = window.topojson.mesh(world, world.objects.countries, (a, b) => a !== b);
+        borderD = this._geoToSvgPath(borders, proj);
+      } catch(e) { console.warn("NPT board map topo:", e); }
     }
 
-    // Scale arc tube thickness proportionally with camera altitude so the arc
-    // appears the same on-screen width at the stop pose (0.25) regardless of zoom.
-    const K = 0.25;
-    const stopAlt = routePov.altitude;
-    let lastStroke = K;
-    globe.controls().addEventListener('change', () => {
-      if (!globe) return;
-      const s = Math.max(0.004, K * globe.pointOfView().altitude / stopAlt);
-      if (Math.abs(s - lastStroke) / lastStroke > 0.08) {
-        lastStroke = s;
-        globe.arcStroke(s);
-      }
-    });
+    // Route path strings
+    const svgPts       = routePts.map(pt => proj(pt.lat, pt.lng));
+    const confirmedPts = [...coords].reverse().map(c => proj(c.lat, c.lng));
+    const confirmedD   = confirmedPts.map((p, i) => `${i===0?"M":"L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    let futureD = "";
+    if (hasFutureArc && coords.length > 0) {
+      const cp = proj(coords[0].lat, coords[0].lng);
+      const hp = proj(homeLat, homeLng);
+      futureD = `M${cp.x.toFixed(1)},${cp.y.toFixed(1)} L${hp.x.toFixed(1)},${hp.y.toFixed(1)}`;
+    }
+
+    // Deduplicate consecutive markers at the same projected position
+    const confirmedCount = coords.length;
+    const seenPts = new Set();
+    const markerSvg = routePts.map((pt, i) => {
+      const p   = proj(pt.lat, pt.lng);
+      const key = `${p.x.toFixed(0)},${p.y.toFixed(0)}`;
+      if (seenPts.has(key)) return "";
+      seenPts.add(key);
+      const ci  = this._checkpointInfo(pt);
+      const isCurrentStop = !pt.isHome && i === confirmedCount - 1;
+      const isOrigin = i === 0;
+      const fill   = pt.isHome ? "#66bb6a" : (isCurrentStop ? arcColor : "#F4E4C1");
+      const stroke = pt.isHome ? "#388e3c" : "#7A5020";
+      const r      = isCurrentStop || pt.isHome ? 8 : 6;
+      const labelY = p.y > H * 0.85 ? p.y - 12 : p.y + 18;
+      const rawLabel = pt.isHome
+        ? (this._isNo ? "Hjem" : "Home")
+        : (pt.location || pt.description || "").slice(0, 22);
+      const label = this._escapeHtml(rawLabel);
+      const pulse = (isCurrentStop && !reducedMotion)
+        ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="${arcColor}" opacity="0.3"><animate attributeName="r" values="${r};${r+7};${r}" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.5;0;0.5" dur="1.6s" repeatCount="indefinite"/></circle>`
+        : "";
+      const iconText = isCurrentStop ? curEmoji : ci.icon;
+      const iconColor = isCurrentStop ? "#F4E4C1" : "#7A5020";
+      const icon = (isCurrentStop || isOrigin || pt.isHome)
+        ? `<text x="${p.x.toFixed(1)}" y="${(p.y+3.5).toFixed(1)}" text-anchor="middle" font-size="9" fill="${iconColor}">${iconText}</text>`
+        : "";
+      return `<g class="bm-city">
+        <title>${label}</title>
+        ${pulse}
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r+3}" fill="none" stroke="#7A5020" stroke-width="1.2" opacity="0.6"/>
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.8"/>
+        ${icon}
+        <text x="${p.x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" class="bm-label">${label}</text>
+      </g>`;
+    }).join("");
+
+    const svgHtml = `<svg id="npt-board-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;">
+      <defs>
+        <style>
+          .bm-label{font-family:Georgia,'Times New Roman',serif;font-size:9px;fill:#2C1A07;paint-order:stroke;stroke:#E8D9BC;stroke-width:3;stroke-linejoin:round;}
+          @keyframes bm-dash{to{stroke-dashoffset:-36}}
+          .bm-future{animation:bm-dash 1.8s linear infinite;}
+          @media(prefers-reduced-motion:reduce){.bm-future{animation:none}}
+        </style>
+      </defs>
+      <rect width="${W}" height="${H}" fill="#8CAEBF"/>
+      <g stroke="#6B94A8" stroke-width="0.5" opacity="0.35" fill="none">
+        ${Array.from({length:8},(_,i)=>`<line x1="0" y1="${62+i*52}" x2="${W}" y2="${62+i*52}"/>`).join("")}
+      </g>
+      ${landD?`<path d="${landD}" fill="#C8A97D" stroke="#7A6040" stroke-width="0.9" stroke-linejoin="round"/>`:""}
+      ${borderD?`<path d="${borderD}" fill="none" stroke="#A88050" stroke-width="0.4" opacity="0.45"/>`:""}
+      ${confirmedD?`
+        <path d="${confirmedD}" fill="none" stroke="rgba(60,0,0,0.2)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="${confirmedD}" fill="none" stroke="#8B1A1A" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14 10"/>
+      `:""}
+      ${futureD?`
+        <path d="${futureD}" fill="none" stroke="rgba(60,0,0,0.15)" stroke-width="7" stroke-linecap="round"/>
+        <path d="${futureD}" fill="none" stroke="${arcColor}" stroke-width="4" stroke-linecap="round" stroke-dasharray="10 8" class="bm-future"/>
+      `:""}
+      ${markerSvg}
+      <g transform="translate(958,448)">
+        <circle r="20" fill="#F4E4C1" stroke="#7A5020" stroke-width="1.5" opacity="0.9"/>
+        <polygon points="0,-17 3,-7 -3,-7" fill="#8B1A1A"/>
+        <polygon points="0,17 3,7 -3,7" fill="#7A6040"/>
+        <polygon points="17,0 7,3 7,-3" fill="#7A6040"/>
+        <polygon points="-17,0 -7,3 -7,-3" fill="#7A6040"/>
+        <circle r="3" fill="#8B1A1A"/>
+        <text x="0" y="-21" text-anchor="middle" font-family="serif" font-size="8" fill="#2C1A07" font-weight="700">N</text>
+      </g>
+      <rect x="6" y="468" width="186" height="24" rx="2" fill="#F4E4C1" opacity="0.85"/>
+      <text x="99" y="484" text-anchor="middle" font-family="Georgia,serif" font-size="10" font-weight="700" fill="#2C1A07" letter-spacing="0.08em">NORWEGIAN PARCEL TRACKER</text>
+    </svg>`;
+
+    mapDiv.innerHTML = svgHtml;
+
+    // Animate paper plane along route
+    const svg = mapDiv.querySelector("#npt-board-svg");
+    if (svg && svgPts.length >= 2 && !reducedMotion) {
+      this._animatePlane(svg, svgPts);
+    }
   }
 
-  /** Classify a route coordinate into a checkpoint type for globe marker styling. */
+  /** Convert GeoJSON geometry to an SVG path d-string using the given projection. */
+  _geoToSvgPath(geom, proj) {
+    if (!geom) return "";
+    const ptToStr = ([lon, lat]) => {
+      const {x, y} = proj(lat, lon);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    };
+    const ringToPath = (ring) => ring.map((pt, i) => (i===0?"M":"L") + ptToStr(pt)).join("") + "Z";
+    const t = geom.type;
+    if (t === "Polygon")        return geom.coordinates.map(ringToPath).join(" ");
+    if (t === "MultiPolygon")   return geom.coordinates.flatMap(p => p.map(ringToPath)).join(" ");
+    if (t === "MultiLineString") return geom.coordinates.map(ln => ln.map((pt,i)=>(i===0?"M":"L")+ptToStr(pt)).join("")).join(" ");
+    if (t === "FeatureCollection") return geom.features.map(f => this._geoToSvgPath(f.geometry, proj)).join(" ");
+    if (t === "Feature")        return this._geoToSvgPath(geom.geometry, proj);
+    return "";
+  }
+
+  /** Animate a paper-plane SVG element along a route. */
+  _animatePlane(svg, pts) {
+    if (this._planeAnimId) { cancelAnimationFrame(this._planeAnimId); this._planeAnimId = null; }
+    const ns = "http://www.w3.org/2000/svg";
+    const g = document.createElementNS(ns, "g");
+    g.id = "npt-plane";
+    const path = document.createElementNS(ns, "path");
+    // Paper-plane shape pointing right
+    path.setAttribute("d", "M11,0 L-7,-5 L-4,0 L-7,5 Z");
+    path.setAttribute("fill", "#8B1A1A");
+    path.setAttribute("stroke", "#F4E4C1");
+    path.setAttribute("stroke-width", "1");
+    g.appendChild(path);
+    // Position at start so it doesn't sit at (0,0) during the initial delay
+    g.setAttribute("transform", `translate(${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}) rotate(0)`);
+    svg.appendChild(g);
+
+    // Pre-compute cumulative distances for constant-speed traversal
+    const dists = [0];
+    for (let i = 1; i < pts.length; i++) {
+      const dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
+      dists.push(dists[i-1] + Math.sqrt(dx*dx + dy*dy));
+    }
+    const total = dists[dists.length - 1];
+
+    const dur   = 5000;
+    const delay = 2200; // ms — after bm-draw animation
+    let start   = null;
+
+    const tick = (ts) => {
+      if (!g.isConnected) return;
+      if (!start) start = ts;
+      const t = Math.max(0, Math.min(1, (ts - start - delay) / dur));
+      if (t > 0) {
+        const d = t * total;
+        let seg = pts.length - 2;
+        for (let i = 1; i < dists.length; i++) { if (dists[i] >= d) { seg = i - 1; break; } }
+        const segT  = dists[seg+1] > dists[seg] ? (d - dists[seg]) / (dists[seg+1] - dists[seg]) : 0;
+        const p1 = pts[seg], p2 = pts[seg+1];
+        const x = p1.x + (p2.x - p1.x) * segT;
+        const y = p1.y + (p2.y - p1.y) * segT;
+        const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+        g.setAttribute("transform", `translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${ang.toFixed(1)})`);
+      }
+      if (t < 1) {
+        this._planeAnimId = requestAnimationFrame(tick);
+      } else {
+        // Loop
+        start = null;
+        this._planeAnimId = requestAnimationFrame(tick);
+      }
+    };
+    this._planeAnimId = requestAnimationFrame(tick);
+  }
+
+  /** Classify a route coordinate into a checkpoint type for board map marker styling. */
   _checkpointInfo(c) {
     const desc = ((c.description || "") + " " + (c.location || "")).toLowerCase();
     // Norwegian: toll, grense, fortolling, tollklarering, import; English: customs, border, clearance
@@ -1537,28 +1559,38 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     requestAnimationFrame(() => map.invalidateSize());
   }
 
-  /** Download a PNG of the Globe.gl 3D route view. */
-  _takeGlobeScreenshot() {
-    if (!this._globeInstance) return;
+  /** Download a PNG of the board map route view by serialising SVG → canvas → blob. */
+  _takeBoardMapScreenshot() {
+    const svg = this._shadow.getElementById("npt-board-svg");
+    if (!svg) return;
     try {
-      const canvas = this._globeInstance.renderer().domElement;
-      canvas.toBlob((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "parcel-globe.png";
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 2000);
-      });
-    } catch (e) {
-      console.warn("NPT globe screenshot:", e);
-    }
+      const xml  = new XMLSerializer().serializeToString(svg);
+      const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+      const url  = URL.createObjectURL(blob);
+      const img  = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1000; canvas.height = 500;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        canvas.toBlob((pngBlob) => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(pngBlob);
+          a.download = "parcel-map.png";
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 2000);
+        });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); console.warn("NPT board map screenshot: SVG load failed"); };
+      img.src = url;
+    } catch(e) { console.warn("NPT board map screenshot:", e); }
   }
 
-  /** Toggle the globe container between normal and full-viewport. */
-  _toggleGlobeExpanded() {
+  /** Toggle the board map container between normal and full-viewport. */
+  _toggleBoardMapExpanded() {
     const mapDiv = this._shadow.getElementById("npt-route-map");
-    if (!mapDiv || !this._globeInstance) return;
+    if (!mapDiv) return;
     const block = mapDiv.closest(".map-block");
     if (!block) return;
     const expanding = !block.classList.contains("map-expanded");
@@ -1568,18 +1600,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
       btn.title = expanding ? (this._isNo ? "Lukk" : "Close") : (this._isNo ? "Fullvindu" : "Full window");
     });
     if (expanding) {
-      this._mapEscHandler = (e) => { if (e.key === "Escape") this._toggleGlobeExpanded(); };
+      this._mapEscHandler = (e) => { if (e.key === "Escape") this._toggleBoardMapExpanded(); };
       document.addEventListener("keydown", this._mapEscHandler);
     } else {
       if (this._mapEscHandler) { document.removeEventListener("keydown", this._mapEscHandler); this._mapEscHandler = null; }
     }
-    // Let Globe.gl's ResizeObserver detect the new size; nudge it with width/height if needed
-    requestAnimationFrame(() => {
-      if (!this._globeInstance) return;
-      const w = mapDiv.offsetWidth;
-      const h = mapDiv.offsetHeight;
-      if (w && h) this._globeInstance.width(w).height(h);
-    });
   }
 }
 
