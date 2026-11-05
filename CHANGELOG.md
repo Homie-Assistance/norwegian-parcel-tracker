@@ -2,6 +2,8 @@
 
 ## 2.6.0 (unreleased)
 
+- **Per-user parcel display filtering** (partial, issue #16): when a logged-in user adds a parcel via the `add_parcel` service (panel, Lovelace card, or automation), their HA user ID is stored as the unrecorded `owner_user_id` sensor attribute. Non-admin users see only parcels they own in the panel and Lovelace cards; parcels without an owner (added before this version, or via email watcher or Settings → Integrations) are visible to everyone. Admin users see all parcels. **Display filtering only** — entities and all their attributes remain readable through Developer Tools, the REST API, and the websocket API for anyone on the HA instance. The `remove_parcel` and other services also do not check ownership. Issue #16 stays open pending broader access-control work.
+
 - **Board game map**: the 3D Globe.gl route map is replaced with a flat illustrated world map in the Ticket to Ride style. Features: parchment background (#E8D9BC), warm sand continents, deep maroon dashed routes, animated paper-plane icon travelling the journey, animated dashed future-leg for in-transit parcels. The map uses an equirectangular projection zoomed to the route's bounding box so domestic routes (Oslo → Bergen) and international routes (Shanghai → Oslo) both frame correctly. Continent and country shapes from world-atlas 110m (topojson-client 3.0.2 via cdnjs, SRI-verified). Compass rose and cartouche always visible in the bottom corners. Pulsing dot on the current stop uses the parcel status colour. Screenshot button saves PNG via SVG→canvas serialisation.
 
 ## 2.5.1

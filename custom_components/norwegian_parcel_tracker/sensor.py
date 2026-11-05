@@ -85,7 +85,7 @@ class BaseParcelSensor(CoordinatorEntity[PostenTrackingCoordinator], SensorEntit
 
 
 class ParcelStatusSensor(BaseParcelSensor):
-    _unrecorded_attributes = frozenset({"recent_events", "route_coords"})
+    _unrecorded_attributes = frozenset({"recent_events", "route_coords", "owner_user_id"})
 
     def __init__(self, coordinator, entry): super().__init__(coordinator, entry, "status")
 
@@ -117,6 +117,8 @@ class ParcelStatusSensor(BaseParcelSensor):
                 attrs["npt_icon"] = meta["npt_icon"]
             if meta.get("display_name"):
                 attrs["display_name"] = meta["display_name"]
+            if meta.get("owner_user_id"):
+                attrs["owner_user_id"] = meta["owner_user_id"]
         return attrs
 
 

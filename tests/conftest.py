@@ -28,6 +28,15 @@ for mod in [
 ]:
     sys.modules.setdefault(mod, MagicMock())
 
+# data_entry_flow needs a real FlowResultType enum value for __init__.py
+_def_module = types.ModuleType("homeassistant.data_entry_flow")
+class _FlowResultType:
+    CREATE_ENTRY = "create_entry"
+    ABORT        = "abort"
+    FORM         = "form"
+_def_module.FlowResultType = _FlowResultType
+sys.modules["homeassistant.data_entry_flow"] = _def_module
+
 # DataUpdateCoordinator must be a real class (not a MagicMock instance) so that
 # PostenTrackingCoordinator inherits from it correctly and becomes a real type.
 class _StubDataUpdateCoordinator:

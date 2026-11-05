@@ -9,6 +9,7 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.data_entry_flow import FlowResultType
 import homeassistant.helpers.config_validation as cv
 import homeassistant.helpers.device_registry as dr
 import voluptuous as vol
@@ -172,11 +173,21 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     async def add_parcel(call):
         tracking_number = call.data["tracking_number"].strip()
         name = call.data.get("name") or tracking_number
-        await hass.config_entries.flow.async_init(
+        result = await hass.config_entries.flow.async_init(
             DOMAIN,
             context={"source": "user"},
             data={"tracking_number": tracking_number, "name": name},
         )
+        # Tag the parcel with the calling user's ID so the panel can filter by owner.
+        # Only tag when the flow actually created a new entry — do not overwrite the
+        # owner when a duplicate tracking number is added (the flow aborts, type != create_entry).
+        # Parcels added via email watcher have no user_id and remain unowned (visible to all).
+        user_id = call.context.user_id if call.context else None
+        if user_id and result.get("type") == FlowResultType.CREATE_ENTRY:
+            meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
+            if meta:
+                await meta.async_set(tracking_number.upper(), owner_user_id=user_id)
+                _async_refresh_coordinator_listeners(hass, tracking_number.upper())
 
     async def refresh(call):
         tracking_filter = str(call.data.get("tracking_number") or "").strip().upper()
