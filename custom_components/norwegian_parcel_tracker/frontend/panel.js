@@ -70,13 +70,11 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    const userId   = hass.user?.id;
-    const isAdmin  = hass.user?.is_admin;
+    const userId = hass.user?.id;
     this._parcels = Object.values(hass.states).filter((s) => {
       if (!s.attributes || s.attributes.npt_master_entity !== true) return false;
-      // If a parcel has an owner_user_id, non-admin users only see their own parcels.
       const owner = s.attributes.owner_user_id;
-      if (owner && !isAdmin && userId && owner !== userId) return false;
+      if (owner && userId && owner !== userId) return false;
       return true;
     });
     // Panel already rendered — update only the table rows, never the map
@@ -1243,6 +1241,8 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
     const confirmedCount = coords.length;
     const keepIdx = new Set(), _seenDedup = new Set();
     for (let i = routePts.length - 1; i >= 0; i--) {
+      // Always keep the synthetic home point so the current-stop pulse is never dropped.
+      if (routePts[i].isHome) { keepIdx.add(i); continue; }
       const p = proj(routePts[i].lat, routePts[i].lng), k = `${p.x.toFixed(0)},${p.y.toFixed(0)}`;
       if (!_seenDedup.has(k)) { _seenDedup.add(k); keepIdx.add(i); }
     }
