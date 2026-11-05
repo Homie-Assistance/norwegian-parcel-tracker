@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.5.x (post-release fixes)
+## 2.5.1
 
 - **Globe arc rendering**: arc tube thickness now scales proportionally with camera altitude so the arc appears approximately the same width on screen at any zoom level. `arcStroke` is set to 0.25 at the route's stop pose and decreases proportionally as the user zooms in — preventing the "huge wall" effect at close range while keeping the arc clearly visible at the default view. `arcsTransitionDuration` set to 0 to prevent 1-second animation stutter on each zoom step. Historical legs use 80% opacity (was 60%). Altitude floor reverted to 1.0 (span / 28): the previous 1.8 floor caused domestic Norway routes to frame all of Europe.
 - **Globe zoom**: reduced intro wait from 3.0 s to 2.7 s; fly-in animation from 2.5 s to 1.5 s. Total intro time cut from 5.5 s to 4.2 s.
