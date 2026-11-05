@@ -70,8 +70,13 @@ class NorwegianParcelTrackerPanel extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    const userId   = hass.user?.id;
+    const isAdmin  = hass.user?.is_admin;
     this._parcels = Object.values(hass.states).filter((s) => {
       if (!s.attributes || s.attributes.npt_master_entity !== true) return false;
+      // If a parcel has an owner_user_id, non-admin users only see their own parcels.
+      const owner = s.attributes.owner_user_id;
+      if (owner && !isAdmin && userId && owner !== userId) return false;
       return true;
     });
     // Panel already rendered — update only the table rows, never the map

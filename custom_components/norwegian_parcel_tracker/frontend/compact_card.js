@@ -58,8 +58,14 @@ class NorwegianParcelCompactCard extends HTMLElement {
 
   _parcels() {
     const cfg = this._cfg();
-    let states = Object.values(this._hass.states)
-      .filter(s => s.entity_id.startsWith("sensor.") && s.attributes?.npt_master_entity === true);
+    const userId  = this._hass.user?.id;
+    const isAdmin = this._hass.user?.is_admin;
+    let states = Object.values(this._hass.states).filter(s => {
+      if (!s.entity_id.startsWith("sensor.") || !s.attributes?.npt_master_entity) return false;
+      const owner = s.attributes?.owner_user_id;
+      if (owner && !isAdmin && userId && owner !== userId) return false;
+      return true;
+    });
     if (!cfg.show_delivered) states = states.filter(s => !this._isDelivered(s.attributes));
     return states.sort((a, b) => {
       const ta = new Date(a.attributes?.latest_event_time || 0).getTime();
