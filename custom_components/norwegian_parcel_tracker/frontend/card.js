@@ -687,16 +687,15 @@ class NorwegianParcelTrackingCard extends HTMLElement {
       return a.npt_master_entity === true || a.parcel_tracker_entity === "status";
     };
 
-    const userId   = this._hass.user?.id;
-    const isAdmin  = this._hass.user?.is_admin;
+    const userId = this._hass.user?.id;
     const visibleOwner = (s) => {
       const owner = s.attributes?.owner_user_id;
-      return !owner || isAdmin || !userId || owner === userId;
+      return !owner || !userId || owner === userId;
     };
 
     let states = [];
     if (Array.isArray(cfg.entities) && cfg.entities.length > 0) {
-      states = cfg.entities.map(id => this._hass.states[id]).filter(isMaster);
+      states = cfg.entities.map(id => this._hass.states[id]).filter(s => isMaster(s) && visibleOwner(s));
     } else {
       states = Object.values(this._hass.states).filter(s => isMaster(s) && visibleOwner(s));
     }

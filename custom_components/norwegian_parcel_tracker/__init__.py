@@ -10,6 +10,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, SupportsResponse
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import ServiceValidationError
 import homeassistant.helpers.config_validation as cv
 import homeassistant.helpers.device_registry as dr
 import voluptuous as vol
@@ -125,6 +126,26 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+def _caller_may_access(hass: HomeAssistant, call, tracking_number: str) -> bool:
+    """Return True if the caller may read or modify this parcel.
+
+    Rules:
+    - No user context (automation, script, CLI) → always allowed.
+    - Parcel has no owner → allowed to everyone.
+    - Caller's user_id matches the owner → allowed.
+    - Any other case (including admins) → denied.
+    """
+    if not call.context or not call.context.user_id:
+        return True
+    meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
+    if not meta:
+        return True
+    owner_id = meta.get(tracking_number).get("owner_user_id")
+    if not owner_id:
+        return True
+    return call.context.user_id == owner_id
+
+
 def _async_refresh_coordinator_listeners(hass: HomeAssistant, tracking_number: str) -> None:
     for coordinator in hass.data.get(DOMAIN, {}).values():
         if (
@@ -206,10 +227,20 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         for coordinator in coordinators:
             await coordinator.async_request_refresh()
 
+    def _not_owner_error(service: str, tracking_number: str) -> ServiceValidationError:
+        """Return a ServiceValidationError for a non-owner access attempt."""
+        return ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="not_owner",
+            translation_placeholders={"service": service, "tracking_number": tracking_number},
+        )
+
     async def remove_parcel(call):
         tracking_number = str(call.data.get("tracking_number") or "").strip().upper()
         if not tracking_number:
             return
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("remove_parcel", tracking_number)
         for entry in hass.config_entries.async_entries(DOMAIN):
             if (entry.unique_id or "").upper() == tracking_number:
                 await hass.config_entries.async_remove(entry.entry_id)
@@ -218,6 +249,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def get_parcel_history(call):
         tracking_number = str(call.data.get("tracking_number") or "").strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("get_parcel_history", tracking_number)
         for coordinator in hass.data.get(DOMAIN, {}).values():
             if (
                 hasattr(coordinator, "_history")
@@ -228,6 +261,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def set_note(call):
         tracking_number = str(call.data["tracking_number"]).strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("set_note", tracking_number)
         text = str(call.data["text"]).strip()
         meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
         if meta:
@@ -236,6 +271,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def clear_note(call):
         tracking_number = str(call.data["tracking_number"]).strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("clear_note", tracking_number)
         meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
         if meta:
             await meta.async_clear_field(tracking_number, "note")
@@ -244,6 +281,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def add_note(call):
         tracking_number = str(call.data["tracking_number"]).strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("add_note", tracking_number)
         text = str(call.data["text"]).strip()
         meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
         if meta and text:
@@ -252,6 +291,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def delete_note(call):
         tracking_number = str(call.data["tracking_number"]).strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("delete_note", tracking_number)
         idx = int(call.data["idx"])
         meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
         if meta:
@@ -260,6 +301,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def set_icon(call):
         tracking_number = str(call.data["tracking_number"]).strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("set_icon", tracking_number)
         icon = str(call.data["icon"]).strip()
         meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
         if meta:
@@ -268,6 +311,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def clear_icon(call):
         tracking_number = str(call.data["tracking_number"]).strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("clear_icon", tracking_number)
         meta: ParcelMetaStore | None = hass.data.get(DOMAIN, {}).get("_meta")
         if meta:
             await meta.async_clear_field(tracking_number, "npt_icon")
@@ -275,6 +320,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def rename_parcel(call):
         tracking_number = str(call.data["tracking_number"]).strip().upper()
+        if not _caller_may_access(hass, call, tracking_number):
+            raise _not_owner_error("rename_parcel", tracking_number)
         new_name = str(call.data["name"]).strip()
         dev_reg = dr.async_get(hass)
         for entry in hass.config_entries.async_entries(DOMAIN):

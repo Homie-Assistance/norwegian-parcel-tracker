@@ -37,6 +37,18 @@ class _FlowResultType:
 _def_module.FlowResultType = _FlowResultType
 sys.modules["homeassistant.data_entry_flow"] = _def_module
 
+# homeassistant.exceptions needs real exception classes so pytest.raises works.
+# ServiceValidationError accepts translation kwargs in real HA; ignore them here.
+_exc_module = types.ModuleType("homeassistant.exceptions")
+class ServiceValidationError(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+class HomeAssistantError(Exception):
+    pass
+_exc_module.ServiceValidationError = ServiceValidationError
+_exc_module.HomeAssistantError = HomeAssistantError
+sys.modules["homeassistant.exceptions"] = _exc_module
+
 # DataUpdateCoordinator must be a real class (not a MagicMock instance) so that
 # PostenTrackingCoordinator inherits from it correctly and becomes a real type.
 class _StubDataUpdateCoordinator:

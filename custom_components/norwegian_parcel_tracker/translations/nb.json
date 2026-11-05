@@ -174,27 +174,61 @@
   },
   "entity": {
     "sensor": {
-      "status": { "name": "Status" },
-      "latest_event": { "name": "Siste hendelse" },
-      "estimated_delivery": { "name": "Estimert levering" },
-      "predicted_eta": { "name": "Forventet levering" },
-      "pickup_point": { "name": "Hentested" },
-      "sender": { "name": "Avsender" },
-      "delivery_method": { "name": "Leveringsmetode" },
-      "weight": { "name": "Vekt" },
-      "length": { "name": "Lengde" },
-      "width": { "name": "Bredde" },
-      "height": { "name": "Høyde" },
-      "stats_avg": { "name": "Gjennomsnittlig leveringstid" },
-      "stats_min": { "name": "Korteste levering" },
-      "stats_max": { "name": "Lengste levering" },
-      "stats_count": { "name": "Leveranser" }
+      "status": {
+        "name": "Status"
+      },
+      "latest_event": {
+        "name": "Siste hendelse"
+      },
+      "estimated_delivery": {
+        "name": "Estimert levering"
+      },
+      "predicted_eta": {
+        "name": "Forventet levering"
+      },
+      "pickup_point": {
+        "name": "Hentested"
+      },
+      "sender": {
+        "name": "Avsender"
+      },
+      "delivery_method": {
+        "name": "Leveringsmetode"
+      },
+      "weight": {
+        "name": "Vekt"
+      },
+      "length": {
+        "name": "Lengde"
+      },
+      "width": {
+        "name": "Bredde"
+      },
+      "height": {
+        "name": "Høyde"
+      },
+      "stats_avg": {
+        "name": "Gjennomsnittlig leveringstid"
+      },
+      "stats_min": {
+        "name": "Korteste levering"
+      },
+      "stats_max": {
+        "name": "Lengste levering"
+      },
+      "stats_count": {
+        "name": "Leveranser"
+      }
     },
     "button": {
-      "order_home_delivery": { "name": "Bestill hjemlevering" }
+      "order_home_delivery": {
+        "name": "Bestill hjemlevering"
+      }
     },
     "device_tracker": {
-      "location": { "name": "Posisjon" }
+      "location": {
+        "name": "Posisjon"
+      }
     }
   },
   "services": {
@@ -303,6 +337,11 @@
           "description": "Det nye visningsnavnet for pakken."
         }
       }
+    }
+  },
+  "exceptions": {
+    "not_owner": {
+      "message": "Du er ikke eier av pakken {tracking_number}."
     }
   }
 }

@@ -227,6 +227,15 @@ class NorwegianParcelTrackerMapCard extends HTMLElement {
     const dtState = hass.states[this._config.entity];
     const sensorState = this._findStatusSensorEntity();
 
+    // If the parcel has an owner other than the current user, show nothing.
+    const owner = sensorState?.attributes?.owner_user_id;
+    const userId = hass.user?.id;
+    if (owner && userId && owner !== userId) {
+      this.shadowRoot.innerHTML = "";
+      this._rendered = false;
+      return;
+    }
+
     const lat = dtState?.attributes?.latitude ?? null;
     const lon = dtState?.attributes?.longitude ?? null;
     const hasLocation = lat !== null && lon !== null;

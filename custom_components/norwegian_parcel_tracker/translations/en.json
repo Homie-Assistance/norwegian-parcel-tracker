@@ -174,27 +174,61 @@
   },
   "entity": {
     "sensor": {
-      "status": { "name": "Status" },
-      "latest_event": { "name": "Latest event" },
-      "estimated_delivery": { "name": "Estimated delivery" },
-      "predicted_eta": { "name": "Predicted delivery" },
-      "pickup_point": { "name": "Pickup point" },
-      "sender": { "name": "Sender" },
-      "delivery_method": { "name": "Delivery method" },
-      "weight": { "name": "Weight" },
-      "length": { "name": "Length" },
-      "width": { "name": "Width" },
-      "height": { "name": "Height" },
-      "stats_avg": { "name": "Average delivery time" },
-      "stats_min": { "name": "Shortest delivery" },
-      "stats_max": { "name": "Longest delivery" },
-      "stats_count": { "name": "Deliveries" }
+      "status": {
+        "name": "Status"
+      },
+      "latest_event": {
+        "name": "Latest event"
+      },
+      "estimated_delivery": {
+        "name": "Estimated delivery"
+      },
+      "predicted_eta": {
+        "name": "Predicted delivery"
+      },
+      "pickup_point": {
+        "name": "Pickup point"
+      },
+      "sender": {
+        "name": "Sender"
+      },
+      "delivery_method": {
+        "name": "Delivery method"
+      },
+      "weight": {
+        "name": "Weight"
+      },
+      "length": {
+        "name": "Length"
+      },
+      "width": {
+        "name": "Width"
+      },
+      "height": {
+        "name": "Height"
+      },
+      "stats_avg": {
+        "name": "Average delivery time"
+      },
+      "stats_min": {
+        "name": "Shortest delivery"
+      },
+      "stats_max": {
+        "name": "Longest delivery"
+      },
+      "stats_count": {
+        "name": "Deliveries"
+      }
     },
     "button": {
-      "order_home_delivery": { "name": "Order home delivery" }
+      "order_home_delivery": {
+        "name": "Order home delivery"
+      }
     },
     "device_tracker": {
-      "location": { "name": "Location" }
+      "location": {
+        "name": "Location"
+      }
     }
   },
   "services": {
@@ -241,6 +275,11 @@
           "description": "Tracking number of the parcel to retrieve history for."
         }
       }
+    }
+  },
+  "exceptions": {
+    "not_owner": {
+      "message": "You are not the owner of parcel {tracking_number}."
     }
   }
 }
