@@ -60,7 +60,9 @@
           "email_folder": "Postmappe",
           "email_poll_interval_minutes": "Søkeintervall (minutter)",
           "email_days_back": "Søk i e-post fra de siste N dagene",
-          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages"
+          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages",
+          "email_sender_allowlist": "Domenefilter for avsendere (valgfritt)",
+          "email_check_password_breach": "Sjekk app-passord mot kjente datalekkasjer"
         },
         "data_description": {
           "email_server": "IMAP-serveren til e-postleverandøren din. Eksempler: imap.gmail.com, outlook.office365.com.",
@@ -69,7 +71,9 @@
           "email_folder": "Postmappen som skal søkes. La stå som INBOX for å søke i innboksen.",
           "email_poll_interval_minutes": "Hvor ofte nye e-poster sjekkes. 15 minutter er et godt utgangspunkt.",
           "email_days_back": "Ved første oppstart søkes det gjennom e-post fra de siste N dagene. Etterfølgende søk behandler bare nye e-poster.",
-          "email_auto_add": "Når av (standard) vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse."
+          "email_auto_add": "Når av (standard) vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse.",
+          "email_sender_allowlist": "Behandle bare e-post fra disse avsenderdomenene. Kommaseparert, f.eks. `posten.no, bring.com, helthjem.no, aliexpress.com`. La stå tomt for å behandle e-post fra alle avsendere. Dette reduserer støy — det er ikke en sikkerhetsgrense, siden Fra-feltet kan forfalskes.",
+          "email_check_password_breach": "Når på sendes de første 5 tegnene av SHA-1-hashen av app-passordet til api.pwnedpasswords.com (Have I Been Pwned) for å sjekke om det er kjent fra datalekkasjer. Hele passordet forlater aldri enheten din. Skru av hvis du ikke vil at noen data sendes."
         }
       },
       "confirm_discovery": {
@@ -151,7 +155,9 @@
           "email_folder": "Postmappe",
           "email_poll_interval_minutes": "Søkeintervall (minutter)",
           "email_days_back": "Søk i e-post fra de siste N dagene",
-          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages"
+          "email_auto_add": "Legg automatisk til sporingsnumre som oppdages",
+          "email_sender_allowlist": "Domenefilter for avsendere (valgfritt)",
+          "email_check_password_breach": "Sjekk app-passord mot kjente datalekkasjer"
         },
         "data_description": {
           "email_server": "IMAP-serveren til e-postleverandøren din. Eksempler: imap.gmail.com, outlook.office365.com.",
@@ -160,7 +166,9 @@
           "email_folder": "Postmappen som skal søkes. La stå som INBOX for å søke i innboksen.",
           "email_poll_interval_minutes": "Hvor ofte nye e-poster sjekkes.",
           "email_days_back": "E-post fra de siste N dagene inkluderes. Bare nye (ubehandlede) e-poster behandles.",
-          "email_auto_add": "Når av vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse."
+          "email_auto_add": "Når av vises oppdagede sporingsnumre under Innstillinger → Integrasjoner slik at du kan legge til eller ignorere dem. Når på legges de til umiddelbart uten bekreftelse.",
+          "email_sender_allowlist": "Behandle bare e-post fra disse avsenderdomenene. Kommaseparert, f.eks. `posten.no, bring.com, helthjem.no, aliexpress.com`. La stå tomt for å behandle e-post fra alle avsendere. Dette reduserer støy — det er ikke en sikkerhetsgrense, siden Fra-feltet kan forfalskes.",
+          "email_check_password_breach": "Når på sendes de første 5 tegnene av SHA-1-hashen av app-passordet til api.pwnedpasswords.com (Have I Been Pwned) for å sjekke om det er kjent fra datalekkasjer. Hele passordet forlater aldri enheten din. Skru av hvis du ikke vil at noen data sendes."
         }
       }
     },

@@ -60,7 +60,9 @@
           "email_folder": "Mailbox folder",
           "email_poll_interval_minutes": "Poll interval (minutes)",
           "email_days_back": "Scan emails from the last N days",
-          "email_auto_add": "Automatically add found tracking numbers"
+          "email_auto_add": "Automatically add found tracking numbers",
+          "email_sender_allowlist": "Sender domain filter (optional)",
+          "email_check_password_breach": "Check app password against known data breaches"
         },
         "data_description": {
           "email_server": "Your mail provider's IMAP server. Examples: imap.gmail.com, outlook.office365.com.",
@@ -69,7 +71,9 @@
           "email_folder": "The mailbox folder to scan. Leave as INBOX to scan your inbox.",
           "email_poll_interval_minutes": "How often to check for new emails. 15 minutes is a good default.",
           "email_days_back": "On first start, emails this many days back are scanned. Subsequent polls only look at new emails.",
-          "email_auto_add": "When off (default), found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting."
+          "email_auto_add": "When off (default), found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting.",
+          "email_sender_allowlist": "Only process emails from these sender domains. Comma-separated, e.g. `posten.no, bring.com, helthjem.no, aliexpress.com`. Leave empty to process emails from any sender. This reduces noise — it is not a security boundary, since the From header can be forged.",
+          "email_check_password_breach": "When on, the first 5 characters of the SHA-1 hash of your app password are sent to api.pwnedpasswords.com (Have I Been Pwned) to check whether it appears in a known data breach. The full password never leaves your device. Turn off if you do not want any data sent."
         }
       },
       "confirm_discovery": {
@@ -151,7 +155,9 @@
           "email_folder": "Mailbox folder",
           "email_poll_interval_minutes": "Poll interval (minutes)",
           "email_days_back": "Scan emails from the last N days",
-          "email_auto_add": "Automatically add found tracking numbers"
+          "email_auto_add": "Automatically add found tracking numbers",
+          "email_sender_allowlist": "Sender domain filter (optional)",
+          "email_check_password_breach": "Check app password against known data breaches"
         },
         "data_description": {
           "email_server": "Your mail provider's IMAP server. Examples: imap.gmail.com, outlook.office365.com.",
@@ -160,7 +166,9 @@
           "email_folder": "The mailbox folder to scan. Leave as INBOX to scan your inbox.",
           "email_poll_interval_minutes": "How often to check for new emails.",
           "email_days_back": "Emails this many days back are included. Only new (unseen) emails are processed.",
-          "email_auto_add": "When off, found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting."
+          "email_auto_add": "When off, found tracking numbers appear in Settings → Integrations for you to add or ignore. When on, they are added immediately without prompting.",
+          "email_sender_allowlist": "Only process emails from these sender domains. Comma-separated, e.g. `posten.no, bring.com, helthjem.no, aliexpress.com`. Leave empty to process emails from any sender. This reduces noise — it is not a security boundary, since the From header can be forged.",
+          "email_check_password_breach": "When on, the first 5 characters of the SHA-1 hash of your app password are sent to api.pwnedpasswords.com (Have I Been Pwned) to check whether it appears in a known data breach. The full password never leaves your device. Turn off if you do not want any data sent."
         }
       }
     },

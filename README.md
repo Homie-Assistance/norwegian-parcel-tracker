@@ -170,6 +170,32 @@ The watcher looks for these tracking number formats:
 
 Numbers are validated via the carrier API before being added. Invalid or unsupported numbers are silently skipped and will not be retried.
 
+### Sender domain filter
+
+To reduce noise from unrelated emails (newsletters, receipts from services that never ship parcels), you can enter a comma-separated list of sender domains in the **Sender domain filter** field:
+
+```
+posten.no, bring.com, helthjem.no, aliexpress.com, amazon.com, komplett.no
+```
+
+The filter accepts bare domains (`bring.com`), `@bring.com`, `*.bring.com`, `.bring.com`, or full email addresses (`noreply@bring.com`) — all normalise to `bring.com`, and subdomains such as `email.bring.com` match automatically.
+
+Leave the field empty to process emails from any sender. This filter reduces noise only; it is not a security boundary — the `From` header can be forged.
+
+### Breach check
+
+When the **Check app password against known data breaches** option is enabled (the default), the integration contacts [Have I Been Pwned](https://haveibeenpwned.com) using the [k-Anonymity model](https://haveibeenpwned.com/API/v3#PwnedPasswords):
+
+- Only the first **5 hexadecimal characters** of the SHA-1 hash of your app password are sent to `api.pwnedpasswords.com`.
+- The full password never leaves your device.
+- If the password is found in a known breach, a persistent notification is raised in Home Assistant.
+
+The check runs once per HA session per password. If you rotate the password in the email watcher settings, the check runs again automatically.
+
+**Attribution:** Pwned Passwords data is provided by [Have I Been Pwned](https://haveibeenpwned.com), licensed under [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+
+To opt out, uncheck the breach-check option in the email watcher settings.
+
 ### Privacy note
 
 Credentials (including the password) are stored in Home Assistant's internal `.storage/core.config_entries` file, which is protected by your HA instance's access controls. Use a dedicated app password and a restricted mailbox if you want to limit exposure.
@@ -247,6 +273,8 @@ Planned features in rough priority order:
 | **Full event history storage** | Released (v2.0.0) | All tracking events stored persistently in HA `.storage/` (up to 500 events per parcel). Exposed via `get_parcel_history` service and `recent_events` sensor attribute. |
 | **AliExpress / Cainiao tracking** | Released (v2.2.0) | Direct call to Cainiao's public endpoint. Supports LP…CN, LX…CN, RX…CN, and AP… number formats. No sign-up or API key required. |
 | **Per-user parcel privacy** | Unreleased (v2.6.0) | Each user sees only their own parcels in the panel and all Lovelace cards. Services that modify or read a parcel's private data raise `ServiceValidationError` for non-owners. This integration gives admins no special override — but Home Assistant itself does not enforce per-entity read permissions, so an admin can still see all parcel states in Developer Tools → States, history, logbook, the REST API and the websocket API, and can delete any parcel entry from Settings → Integrations (which bypasses the service guard). Unowned parcels (pre-2.6.0 or added by email watcher) remain visible to all. |
+| **Email sender domain filter** | Unreleased (v2.6.0) | Optional comma-separated domain list in email watcher settings restricts which sender domains are scanned. Noise reduction — not a security boundary. |
+| **Email breach check** | Unreleased (v2.6.0) | Checks the stored IMAP app password against [Have I Been Pwned](https://haveibeenpwned.com) using k-Anonymity. Enabled by default; can be disabled per entry in Settings. |
 | **Board game route map** | Unreleased (v2.6.0) | The selected-parcel detail view shows a flat illustrated world map in the Ticket to Ride style: parchment background, warm sand continents, dashed maroon confirmed-leg routes, and an animated paper-plane icon travelling the journey. For in-transit parcels an animated dashed future-leg extends from the last stop. Equirectangular projection zoomed to the route's bounding box so domestic and international routes both frame correctly. Continent shapes from world-atlas 110m (topojson-client 3.0.2, SRI-verified). Overview (all-parcels) map still uses the flat Leaflet view. |
 | **ETA prediction** | Released (v2.5.0) | New **Predicted delivery** sensor per parcel. Uses the last confirmed stop type (customs, airport, warehouse, last-mile) and carrier-specific timing priors to estimate delivery time with a P25–P75 confidence window. State = predicted ISO datetime; attributes include low/high bounds, confidence level, and the stop the estimate is based on. Only active while the parcel is in transit. |
 | **PostNord support** | Blocked | `feature/postnord` branch exists. Blocked on obtaining a PostNord Partner API agreement. |

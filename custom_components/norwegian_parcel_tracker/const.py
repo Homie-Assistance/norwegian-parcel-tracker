@@ -1,6 +1,6 @@
 DOMAIN = "norwegian_parcel_tracker"
 NAME = "Norwegian Parcel Tracker"
-VERSION = "2.5.1"
+VERSION = "2.6.0"
 
 # ── Config entry types ─────────────────────────────────────────────────────────
 CONF_ENTRY_TYPE = "entry_type"
@@ -83,6 +83,10 @@ DEFAULT_EMAIL_POLL_INTERVAL_MINUTES = 15
 DEFAULT_EMAIL_DAYS_BACK = 30
 CONF_EMAIL_AUTO_ADD = "email_auto_add"
 DEFAULT_EMAIL_AUTO_ADD = False  # approval mode by default
+CONF_EMAIL_SENDER_ALLOWLIST = "email_sender_allowlist"
+DEFAULT_EMAIL_SENDER_ALLOWLIST = ""  # empty = accept from any sender
+CONF_EMAIL_CHECK_PASSWORD_BREACH = "email_check_password_breach"
+DEFAULT_EMAIL_CHECK_PASSWORD_BREACH = True
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 DEFAULT_SCAN_INTERVAL_MINUTES = 30

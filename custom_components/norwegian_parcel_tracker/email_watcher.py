@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import email as email_lib
+import email.utils as email_utils
+import hashlib
 import html as html_module
 import imaplib
 import logging
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from typing import Any
@@ -17,18 +21,23 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     CONF_EMAIL_AUTO_ADD,
+    CONF_EMAIL_CHECK_PASSWORD_BREACH,
+    VERSION as _VERSION,
     CONF_EMAIL_DAYS_BACK,
     CONF_EMAIL_FOLDER,
     CONF_EMAIL_PASSWORD,
     CONF_EMAIL_POLL_INTERVAL_MINUTES,
     CONF_EMAIL_PORT,
+    CONF_EMAIL_SENDER_ALLOWLIST,
     CONF_EMAIL_SERVER,
     CONF_EMAIL_USERNAME,
     DEFAULT_EMAIL_AUTO_ADD,
+    DEFAULT_EMAIL_CHECK_PASSWORD_BREACH,
     DEFAULT_EMAIL_DAYS_BACK,
     DEFAULT_EMAIL_FOLDER,
     DEFAULT_EMAIL_POLL_INTERVAL_MINUTES,
     DEFAULT_EMAIL_PORT,
+    DEFAULT_EMAIL_SENDER_ALLOWLIST,
     DOMAIN,
 )
 
@@ -51,6 +60,84 @@ _PATTERNS: list[re.Pattern] = [
 ]
 
 _MAX_NEW_PER_POLL = 20
+
+_HIBP_URL = "https://api.pwnedpasswords.com/range/{prefix}"
+_HIBP_UA = f"norwegian-parcel-tracker/{_VERSION} (https://github.com/Homie-Assistance/norwegian-parcel-tracker)"
+
+
+def _parse_sender_allowlist(raw: str) -> frozenset[str]:
+    """Parse a comma-separated domain/email list into a frozenset of lowercase domain strings.
+
+    Handles common user input forms: `@amazon.com`, `*.amazon.com`, `.amazon.com`,
+    `order@amazon.com` — all normalise to `amazon.com`.
+    """
+    result: set[str] = set()
+    for token in raw.split(","):
+        token = token.strip().lower()
+        if not token:
+            continue
+        # Strip leading punctuation variants: @, *., .
+        for prefix in ("@", "*.", "."):
+            if token.startswith(prefix):
+                token = token[len(prefix):]
+                break
+        # If the token looks like a full email address, keep only the domain part.
+        if "@" in token:
+            token = token.split("@", 1)[1]
+        if token:
+            result.add(token)
+    return frozenset(result)
+
+
+def _sender_domain(msg: email_lib.message.Message) -> str | None:
+    """Extract the sender domain from the From header, or None if unparseable."""
+    _, addr = email_utils.parseaddr(msg.get("From", ""))
+    if "@" in addr:
+        return addr.split("@", 1)[1].lower()
+    return None
+
+
+def _domain_allowed(domain: str | None, allowlist: frozenset[str]) -> bool:
+    """Return True if domain passes the allowlist (suffix match). Empty allowlist = allow all."""
+    if not allowlist:
+        return True
+    if not domain:
+        return False
+    return any(domain == entry or domain.endswith("." + entry) for entry in allowlist)
+
+
+def _check_password_pwned_sync(password: str) -> int | None:
+    """Return the breach count for password via HIBP k-Anonymity API.
+
+    Returns the number of times the password appears in known breaches (0 = not found),
+    or None when the check could not be completed due to a network error.
+
+    Uses k-Anonymity: only the first 5 hex characters of the SHA-1 hash are sent to
+    api.pwnedpasswords.com; the full hash never leaves the device.
+    Add-Padding is requested so all responses are padded to 800–1000 results, masking
+    which prefix was queried.
+
+    Data provided by Have I Been Pwned — https://haveibeenpwned.com
+    Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
+    """
+    sha1 = hashlib.sha1(password.encode("utf-8"), usedforsecurity=False).hexdigest().upper()
+    prefix, suffix = sha1[:5], sha1[5:]
+    try:
+        req = urllib.request.Request(
+            _HIBP_URL.format(prefix=prefix),
+            headers={"User-Agent": _HIBP_UA, "Add-Padding": "true"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            for line in resp.read().decode("utf-8").splitlines():
+                if ":" in line:
+                    s, _, c = line.partition(":")
+                    if s.strip() == suffix:
+                        count_str = c.strip()
+                        return int(count_str) if count_str.isdigit() else 1
+        return 0
+    except Exception:
+        _LOGGER.debug("HIBP breach check failed (network error); will retry next poll")
+        return None
 
 
 def _extract_text(msg: email_lib.message.Message) -> str:
@@ -103,6 +190,7 @@ def _imap_poll(
     days_back: int,
     seen_uids: set[str],
     known_uidvalidity: str | None,
+    sender_allowlist: frozenset[str] | None = None,
 ) -> tuple[list[str], list[str], str | None]:
     """Synchronous IMAP scan. Returns (tracking_numbers, all_uids_in_window, uidvalidity)."""
     conn = imaplib.IMAP4_SSL(server, port)
@@ -146,6 +234,14 @@ def _imap_poll(
                 continue
 
             msg = email_lib.message_from_bytes(raw)
+            if sender_allowlist is not None:
+                domain = _sender_domain(msg)
+                if not _domain_allowed(domain, sender_allowlist):
+                    _LOGGER.debug(
+                        "Email watcher: skipping email from %s (not in sender allowlist)",
+                        domain or "<no From header>",
+                    )
+                    continue
             text = _extract_text(msg)
             found = _extract_tracking_numbers(text)
             tracking_numbers.extend(found)
@@ -166,6 +262,10 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_tracking_numbers: set[str] = set()
         self._uidvalidity: str | None = None
         self._store_loaded: bool = False
+        # SHA-1 hex of the last successfully checked password; None = not yet checked.
+        # Stored in memory only — if it differs from the current password's SHA-1 on the
+        # next poll, the check runs again (handles password rotation without an entry reload).
+        self._pwned_checked_hash: str | None = None
         self._store: Store = Store(
             hass, _STORAGE_VERSION, f"{DOMAIN}_email_{entry.entry_id}"
         )
@@ -215,9 +315,59 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         folder = str(cfg.get(CONF_EMAIL_FOLDER, DEFAULT_EMAIL_FOLDER))
         days_back = int(cfg.get(CONF_EMAIL_DAYS_BACK, DEFAULT_EMAIL_DAYS_BACK))
         auto_add = bool(cfg.get(CONF_EMAIL_AUTO_ADD, DEFAULT_EMAIL_AUTO_ADD))
+        check_breach = bool(cfg.get(CONF_EMAIL_CHECK_PASSWORD_BREACH, DEFAULT_EMAIL_CHECK_PASSWORD_BREACH))
+        sender_allowlist = _parse_sender_allowlist(
+            str(cfg.get(CONF_EMAIL_SENDER_ALLOWLIST, DEFAULT_EMAIL_SENDER_ALLOWLIST))
+        )
 
         if not server or not username or not password:
             raise UpdateFailed("Email watcher not fully configured")
+
+        # Check the IMAP password against HIBP when enabled and when the password has changed
+        # (or has not been checked yet this HA session).
+        # Uses k-Anonymity: only the first 5 SHA-1 hex chars are sent to api.pwnedpasswords.com;
+        # the full hash never leaves the device. Data: Have I Been Pwned (CC BY 4.0).
+        if check_breach:
+            pw_hash = hashlib.sha1(password.encode("utf-8"), usedforsecurity=False).hexdigest()
+            if pw_hash != self._pwned_checked_hash:
+                breach_count = await self.hass.async_add_executor_job(
+                    _check_password_pwned_sync, password
+                )
+                if breach_count is None:
+                    # Network error — leave _pwned_checked_hash unchanged so we retry next poll.
+                    pass
+                elif breach_count > 0:
+                    self._pwned_checked_hash = pw_hash
+                    _LOGGER.warning(
+                        "Email watcher: IMAP password for %s appears in %d known data breach(es). "
+                        "Rotate the app password as soon as possible.",
+                        username,
+                        breach_count,
+                    )
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": "Norwegian Parcel Tracker — Security warning",
+                            "message": (
+                                f"The app password stored for email watcher account **{username}** "
+                                f"has been found in **{breach_count:,}** known data breach(es). "
+                                "Please rotate the password in your email provider and update the "
+                                "[email watcher settings](/config/integrations) immediately.\n\n"
+                                "_Source: [Have I Been Pwned](https://haveibeenpwned.com) "
+                                "(CC BY 4.0, Troy Hunt)_"
+                            ),
+                            "notification_id": f"npt_pwned_{self.entry.entry_id}",
+                        },
+                    )
+                else:
+                    self._pwned_checked_hash = pw_hash
+                    # Dismiss any previously raised breach notification for this entry.
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "dismiss",
+                        {"notification_id": f"npt_pwned_{self.entry.entry_id}"},
+                    )
 
         # Promotion: move pending numbers to seen if the user approved them (parcel entry now exists)
         if self._pending_tracking_numbers:
@@ -235,7 +385,7 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raw_numbers, all_uids, uidvalidity = await self.hass.async_add_executor_job(
                 _imap_poll,
                 server, port, username, password, folder, days_back,
-                self._seen_uids, self._uidvalidity,
+                self._seen_uids, self._uidvalidity, sender_allowlist,
             )
         except imaplib.IMAP4.error as err:
             raise UpdateFailed(f"IMAP error: {err}") from err
