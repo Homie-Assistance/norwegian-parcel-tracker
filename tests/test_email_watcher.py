@@ -7,6 +7,7 @@ import unittest.mock as mock
 import pytest
 
 from custom_components.norwegian_parcel_tracker.email_watcher import (
+    _allowlist_changed,
     _check_password_pwned_sync,
     _domain_allowed,
     _imap_poll,
@@ -242,3 +243,27 @@ def test_imap_poll_sender_filter():
     assert "JD999988887766" not in tracking
     # Both UIDs are recorded as seen (skipped email is still marked seen)
     assert set(all_uids) == {"1", "2"}
+
+
+# ── Allowlist rescan gap (_allowlist_changed) ─────────────────────────────────
+
+def test_allowlist_changed_none_stored_never_triggers():
+    """stored=None means pre-upgrade; never trigger a rescan."""
+    assert _allowlist_changed(None, "bring.com") is False
+    assert _allowlist_changed(None, "") is False
+
+
+def test_allowlist_changed_different_value_triggers():
+    assert _allowlist_changed("bring.com", "bring.com, posten.no") is True
+
+
+def test_allowlist_changed_same_value_no_trigger():
+    assert _allowlist_changed("bring.com", "bring.com") is False
+
+
+def test_allowlist_changed_empty_stored_to_nonempty_triggers():
+    assert _allowlist_changed("", "bring.com") is True
+
+
+def test_allowlist_changed_nonempty_to_empty_triggers():
+    assert _allowlist_changed("bring.com", "") is True

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -80,6 +81,18 @@ class ParcelEventHistory:
     def first_event_time(self) -> str | None:
         return self._events[-1].get("date_iso") if self._events else None
 
+    def arrival_time(self) -> str | None:
+        """Return the ISO time of the first READY_FOR_PICKUP or DELIVERED event.
+
+        Excludes PICKED_UP so that user pickup delay is not counted when computing
+        actual carrier transit time.  Events are stored newest-first, so a linear
+        scan finds the most recent qualifying event.
+        """
+        for event in self._events:
+            if event.get("status") in ("READY_FOR_PICKUP", "DELIVERED"):
+                return event.get("date_iso")
+        return None
+
     async def async_save(self) -> None:
         self._store.async_delay_save(
             lambda: {"version": _STORE_VERSION, "events": self._events}, _SAVE_DELAY
@@ -110,23 +123,83 @@ class DeliveryStatsStore:
         carrier: str,
         first_event_time: str | None,
         delivered_time: str,
+        carrier_group: str | None = None,
+        stop_type: str | None = None,
+        last_stop_time: str | None = None,
     ) -> bool:
+        """Record a completed delivery.
+
+        When carrier_group, stop_type, and last_stop_time are supplied the actual
+        hours from last in-transit stop to delivery are computed and stored so that
+        get_learned_prior() can replace hardcoded ETA priors for that (carrier_group,
+        stop_type) pair once enough samples have accumulated.
+        """
         if not self._loaded:
             await self.async_load()
         if any(r["tracking_number"] == tracking_number for r in self._records):
             return False
-        self._records.append(
-            {
-                "tracking_number": tracking_number,
-                "carrier": carrier,
-                "first_event_time": first_event_time,
-                "delivered_time": delivered_time,
-            }
-        )
+
+        record: dict[str, Any] = {
+            "tracking_number": tracking_number,
+            "carrier": carrier,
+            "first_event_time": first_event_time,
+            "delivered_time": delivered_time,
+        }
+        if carrier_group and stop_type and last_stop_time:
+            try:
+                t0 = datetime.fromisoformat(last_stop_time)
+                t1 = datetime.fromisoformat(delivered_time)
+                if t0.tzinfo is None:
+                    t0 = t0.replace(tzinfo=timezone.utc)
+                if t1.tzinfo is None:
+                    t1 = t1.replace(tzinfo=timezone.utc)
+                actual_hours = (t1 - t0).total_seconds() / 3600
+                if actual_hours >= 0:
+                    record["carrier_group"] = carrier_group
+                    record["stop_type"] = stop_type
+                    record["last_stop_time"] = last_stop_time
+                    record["actual_hours"] = round(actual_hours, 2)
+            except (ValueError, TypeError):
+                pass
+
+        self._records.append(record)
         self._store.async_delay_save(
             lambda: {"version": _STORE_VERSION, "records": list(self._records)}, _SAVE_DELAY
         )
         return True
+
+    def get_learned_prior(
+        self,
+        carrier_group: str,
+        stop_type: str,
+        min_samples: int = 5,
+    ) -> tuple[float, float, float] | None:
+        """Return (median_h, p25_factor, p75_factor) derived from recorded deliveries.
+
+        Uses actual hours from the last in-transit stop to delivery for the given
+        (carrier_group, stop_type) pair.  Returns None when fewer than min_samples
+        qualifying records exist so callers can fall back to hardcoded priors.
+        """
+        samples = [
+            r["actual_hours"]
+            for r in self._records
+            if r.get("carrier_group") == carrier_group
+            and r.get("stop_type") == stop_type
+            and isinstance(r.get("actual_hours"), (int, float))
+            and r["actual_hours"] > 0
+        ]
+        if len(samples) < min_samples:
+            return None
+
+        sorted_h = sorted(samples)
+        n = len(sorted_h)
+        median_h = sorted_h[n // 2]
+        p25_h = sorted_h[n // 4]
+        p75_h = sorted_h[min(3 * n // 4, n - 1)]
+
+        if median_h <= 0:
+            return None
+        return (median_h, p25_h / median_h, p75_h / median_h)
 
     def get_records(self) -> list[dict[str, Any]]:
         return list(self._records)

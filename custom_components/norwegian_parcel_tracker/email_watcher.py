@@ -168,6 +168,15 @@ def _extract_text(msg: email_lib.message.Message) -> str:
     return "\n".join(parts)
 
 
+def _allowlist_changed(stored: str | None, current: str) -> bool:
+    """Return True when the allowlist has changed and seen UIDs should be cleared.
+
+    Returns False when stored is None (pre-upgrade; no stored value exists yet)
+    so that a fresh install or upgrade does not spuriously clear the UID set.
+    """
+    return stored is not None and current != stored
+
+
 def _extract_tracking_numbers(text: str) -> list[str]:
     upper = text.upper()
     seen: set[str] = set()
@@ -262,6 +271,9 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_tracking_numbers: set[str] = set()
         self._uidvalidity: str | None = None
         self._store_loaded: bool = False
+        # Last persisted sender allowlist string; None = never stored (pre-upgrade).
+        # Used to detect allowlist changes so _seen_uids can be cleared for a rescan.
+        self._stored_sender_allowlist: str | None = None
         # SHA-1 hex of the last successfully checked password; None = not yet checked.
         # Stored in memory only — if it differs from the current password's SHA-1 on the
         # next poll, the check runs again (handles password rotation without an entry reload).
@@ -292,6 +304,8 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._seen_tracking_numbers = set(stored.get("seen_tracking_numbers", []))
             self._pending_tracking_numbers = set(stored.get("pending_tracking_numbers", []))
             self._uidvalidity = stored.get("uidvalidity")
+            # None means the field was never stored (pre-upgrade); skip the rescan check.
+            self._stored_sender_allowlist = stored.get("sender_allowlist")
         self._store_loaded = True
 
     async def _async_save_store(self) -> None:
@@ -300,6 +314,7 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "seen_tracking_numbers": list(self._seen_tracking_numbers),
             "pending_tracking_numbers": list(self._pending_tracking_numbers),
             "uidvalidity": self._uidvalidity,
+            "sender_allowlist": self._stored_sender_allowlist or "",
         })
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -316,9 +331,18 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         days_back = int(cfg.get(CONF_EMAIL_DAYS_BACK, DEFAULT_EMAIL_DAYS_BACK))
         auto_add = bool(cfg.get(CONF_EMAIL_AUTO_ADD, DEFAULT_EMAIL_AUTO_ADD))
         check_breach = bool(cfg.get(CONF_EMAIL_CHECK_PASSWORD_BREACH, DEFAULT_EMAIL_CHECK_PASSWORD_BREACH))
-        sender_allowlist = _parse_sender_allowlist(
-            str(cfg.get(CONF_EMAIL_SENDER_ALLOWLIST, DEFAULT_EMAIL_SENDER_ALLOWLIST))
-        )
+        raw_allowlist = str(cfg.get(CONF_EMAIL_SENDER_ALLOWLIST, DEFAULT_EMAIL_SENDER_ALLOWLIST))
+        sender_allowlist = _parse_sender_allowlist(raw_allowlist)
+
+        # When the sender allowlist has been widened, previously-skipped email UIDs
+        # are already in _seen_uids and would not be rescanned.  Detect the change and
+        # clear _seen_uids so the full window is scanned with the new allowlist.
+        if self._store_loaded and _allowlist_changed(self._stored_sender_allowlist, raw_allowlist):
+            _LOGGER.debug(
+                "Email watcher: sender allowlist changed; clearing seen UIDs to rescan"
+            )
+            self._seen_uids.clear()
+        self._stored_sender_allowlist = raw_allowlist
 
         if not server or not username or not password:
             raise UpdateFailed("Email watcher not fully configured")

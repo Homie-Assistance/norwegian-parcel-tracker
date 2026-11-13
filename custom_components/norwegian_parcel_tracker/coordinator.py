@@ -77,6 +77,10 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         self._calendar_created_for: str | None = None
         self._refreshing: bool = False
         self._history = ParcelEventHistory(hass, entry.entry_id)
+        # Last non-None prediction metadata; kept across the transition to delivered so
+        # _async_record_delivery can store the (carrier_group, stop_type, last_stop_time)
+        # that was active when the parcel was still in transit.
+        self._last_prior_prediction: dict | None = None
         hass.data.setdefault(DOMAIN, {})
         if "_stats" not in hass.data[DOMAIN]:
             hass.data[DOMAIN]["_stats"] = DeliveryStatsStore(hass)
@@ -95,6 +99,9 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
 
     async def async_config_entry_first_refresh(self) -> None:
         await self._history.async_load()
+        # Load the shared stats store so get_learned_prior() has records from day 1.
+        if not self._stats._loaded:
+            await self._stats.async_load()
         await super().async_config_entry_first_refresh()
 
     def _get_global_options(self) -> dict[str, Any]:
@@ -174,6 +181,14 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
 
         self._history.merge(parcel.events)
         await self._history.async_save()
+
+        # Update last prediction metadata only while parcel is in transit.
+        # On the delivery poll predict_eta returns None; we intentionally keep
+        # the prior-poll's metadata so _async_record_delivery can read it.
+        pred = self._compute_prior_prediction(parcel)
+        if pred is not None:
+            self._last_prior_prediction = pred
+
         await self._async_handle_side_effects(parcel)
         await self._async_update_geocode(parcel)
         if not self._route_task_running:
@@ -191,15 +206,45 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         if parcel.is_delivered:
             await self._async_record_delivery(parcel)
 
+    def _compute_prior_prediction(self, parcel: ParcelData) -> dict | None:
+        """Return predict_eta() metadata for the current parcel state, or None."""
+        from .eta import predict_eta
+        latest = parcel.latest_event
+        if not latest:
+            return None
+        return predict_eta(
+            latest.description,
+            latest.location,
+            latest.date_iso,
+            self._carrier,
+            parcel.current_status,
+        )
+
     async def _async_record_delivery(self, parcel: ParcelData) -> None:
         from .sensor import STATS_UPDATED_SIGNAL
-        latest = parcel.latest_event
-        delivered_time = (latest.date_iso if latest else None) or dt_util.utcnow().isoformat()
+
+        # Use the event history's first READY_FOR_PICKUP/DELIVERED timestamp as the
+        # arrival time so that pickup-point user delay (READY_FOR_PICKUP → PICKED_UP)
+        # is not included in the sample.
+        arrival_time = self._history.arrival_time()
+        if not arrival_time:
+            latest = parcel.latest_event
+            arrival_time = (latest.date_iso if latest else None) or dt_util.utcnow().isoformat()
+
+        carrier_group = stop_type = last_stop_time = None
+        if self._last_prior_prediction:
+            carrier_group = self._last_prior_prediction.get("basis_carrier_group")
+            stop_type = self._last_prior_prediction.get("basis_stop_type")
+            last_stop_time = self._last_prior_prediction.get("last_confirmed_time")
+
         recorded = await self._stats.record_delivery(
             tracking_number=self.tracking_number,
             carrier=self._carrier,
             first_event_time=self._history.first_event_time(),
-            delivered_time=delivered_time,
+            delivered_time=arrival_time,
+            carrier_group=carrier_group,
+            stop_type=stop_type,
+            last_stop_time=last_stop_time,
         )
         if recorded:
             async_dispatcher_send(self.hass, STATS_UPDATED_SIGNAL)

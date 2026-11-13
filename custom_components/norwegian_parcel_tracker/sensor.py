@@ -20,7 +20,7 @@ from .const import (
     DOMAIN,
     ENTRY_TYPE_GLOBAL,
 )
-from .eta import predict_eta
+from .eta import carrier_group_for, checkpoint_type, predict_eta
 from .coordinator import PostenTrackingCoordinator
 from .event_history import DeliveryStatsStore
 from .runtime_strings import _t
@@ -168,6 +168,8 @@ class PredictedEtaSensor(BaseParcelSensor):
 
         Uses latest_event rather than route_coords because route_coords is built in a
         background task (empty on first poll) and skips events that could not be geocoded.
+        When DeliveryStatsStore has enough samples for the (carrier_group, stop_type) pair
+        the learned prior replaces the hardcoded prior table.
         """
         data = self.coordinator.data
         if not data:
@@ -176,12 +178,17 @@ class PredictedEtaSensor(BaseParcelSensor):
         if not latest:
             return None
         carrier = self.coordinator._carrier or CARRIER_POSTEN
+        carrier_group = carrier_group_for(carrier)
+        ctype = checkpoint_type(latest.description or "", latest.location or "")
+        stats: DeliveryStatsStore | None = self.hass.data.get(DOMAIN, {}).get("_stats")
+        learned_prior = stats.get_learned_prior(carrier_group, ctype) if stats else None
         return predict_eta(
             latest.description,
             latest.location,
             latest.date_iso,
             carrier,
             data.current_status,
+            learned_prior=learned_prior,
         )
 
     @property

@@ -111,3 +111,138 @@ async def test_history_loaded_before_merge():
     new_history.merge([new_event])
     assert len(new_history._events) == 2
     assert new_history.merge([existing]) is False
+
+
+# ── arrival_time ──────────────────────────────────────────────────────────────
+
+def test_arrival_time_returns_ready_for_pickup_before_picked_up():
+    h = _make_history()
+    # Events stored newest-first
+    h._events = [
+        {"key": "k1", "date_iso": "2026-11-03T10:00:00+00:00", "status": "PICKED_UP", "description": "Picked up"},
+        {"key": "k2", "date_iso": "2026-11-01T12:00:00+00:00", "status": "READY_FOR_PICKUP", "description": "Ready"},
+        {"key": "k3", "date_iso": "2026-10-30T08:00:00+00:00", "status": "IN_TRANSIT", "description": "In transit"},
+    ]
+    assert h.arrival_time() == "2026-11-01T12:00:00+00:00"
+
+
+def test_arrival_time_returns_delivered_for_direct_delivery():
+    h = _make_history()
+    h._events = [
+        {"key": "k1", "date_iso": "2026-11-02T14:00:00+00:00", "status": "DELIVERED", "description": "Delivered"},
+        {"key": "k2", "date_iso": "2026-11-01T08:00:00+00:00", "status": "IN_TRANSIT", "description": "In transit"},
+    ]
+    assert h.arrival_time() == "2026-11-02T14:00:00+00:00"
+
+
+def test_arrival_time_returns_none_when_no_arrival_event():
+    h = _make_history()
+    h._events = [
+        {"key": "k1", "date_iso": "2026-11-01T08:00:00+00:00", "status": "IN_TRANSIT", "description": "In transit"},
+    ]
+    assert h.arrival_time() is None
+
+
+# ── DeliveryStatsStore learned priors ────────────────────────────────────────
+
+class FakeDeliveryStore:
+    def __init__(self):
+        self._data = None
+
+    async def async_load(self):
+        return self._data
+
+    def async_delay_save(self, callback, delay):
+        self._data = callback()
+
+
+def _make_stats_store():
+    from custom_components.norwegian_parcel_tracker.event_history import DeliveryStatsStore
+    store = DeliveryStatsStore.__new__(DeliveryStatsStore)
+    store._store = FakeDeliveryStore()
+    store._records = []
+    store._loaded = True
+    return store
+
+
+@pytest.mark.asyncio
+async def test_record_delivery_stores_actual_hours():
+    s = _make_stats_store()
+    recorded = await s.record_delivery(
+        tracking_number="TEST001",
+        carrier="posten",
+        first_event_time="2026-11-01T08:00:00+00:00",
+        delivered_time="2026-11-02T08:00:00+00:00",
+        carrier_group="domestic",
+        stop_type="warehouse",
+        last_stop_time="2026-11-01T08:00:00+00:00",
+    )
+    assert recorded is True
+    assert len(s._records) == 1
+    assert s._records[0]["actual_hours"] == 24.0
+    assert s._records[0]["carrier_group"] == "domestic"
+    assert s._records[0]["stop_type"] == "warehouse"
+
+
+@pytest.mark.asyncio
+async def test_record_delivery_duplicate_ignored():
+    s = _make_stats_store()
+    await s.record_delivery("TEST001", "posten", None, "2026-11-01T12:00:00+00:00")
+    recorded = await s.record_delivery("TEST001", "posten", None, "2026-11-01T13:00:00+00:00")
+    assert recorded is False
+    assert len(s._records) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_learned_prior_insufficient_samples_returns_none():
+    s = _make_stats_store()
+    for i in range(4):
+        s._records.append({
+            "tracking_number": f"TEST{i:03d}",
+            "carrier": "posten",
+            "carrier_group": "domestic",
+            "stop_type": "warehouse",
+            "actual_hours": 24.0,
+            "first_event_time": None,
+            "delivered_time": "2026-11-02T08:00:00+00:00",
+        })
+    assert s.get_learned_prior("domestic", "warehouse") is None
+
+
+@pytest.mark.asyncio
+async def test_get_learned_prior_returns_tuple_with_enough_samples():
+    s = _make_stats_store()
+    for i, h in enumerate([10.0, 12.0, 14.0, 16.0, 18.0]):
+        s._records.append({
+            "tracking_number": f"TEST{i:03d}",
+            "carrier": "posten",
+            "carrier_group": "domestic",
+            "stop_type": "warehouse",
+            "actual_hours": h,
+            "first_event_time": None,
+            "delivered_time": "2026-11-02T08:00:00+00:00",
+        })
+    result = s.get_learned_prior("domestic", "warehouse")
+    assert result is not None
+    median_h, p25_factor, p75_factor = result
+    # n=5: n//2=2→14, n//4=1→12, 3*n//4=3→16
+    assert median_h == 14.0
+    assert p25_factor == pytest.approx(12.0 / 14.0, rel=1e-3)
+    assert p75_factor == pytest.approx(16.0 / 14.0, rel=1e-3)
+
+
+@pytest.mark.asyncio
+async def test_get_learned_prior_ignores_other_carrier_group():
+    s = _make_stats_store()
+    for i in range(5):
+        s._records.append({
+            "tracking_number": f"C{i}",
+            "carrier": "cainiao",
+            "carrier_group": "cainiao",
+            "stop_type": "warehouse",
+            "actual_hours": 72.0,
+            "first_event_time": None,
+            "delivered_time": "2026-11-02T08:00:00+00:00",
+        })
+    assert s.get_learned_prior("domestic", "warehouse") is None
+    assert s.get_learned_prior("cainiao", "warehouse") is not None

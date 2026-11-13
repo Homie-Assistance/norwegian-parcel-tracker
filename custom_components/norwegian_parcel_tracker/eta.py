@@ -1,8 +1,11 @@
 """ETA prediction for in-transit parcels.
 
-Predicts delivery time from the last confirmed stop using hard-coded priors
-per carrier group and checkpoint type. When learned leg-duration data becomes
-available in DeliveryStatsStore this module will use it instead of the priors.
+Predicts delivery time from the last confirmed stop.  By default it uses
+hardcoded priors per (carrier_group, checkpoint_type).  Once DeliveryStatsStore
+has accumulated at least 5 actual leg-duration samples for a given
+(carrier_group, stop_type) pair, predict_eta() accepts a learned_prior tuple
+from the caller (DeliveryStatsStore.get_learned_prior) and uses those
+percentile-derived values instead, setting confidence="learned" in the result.
 """
 from __future__ import annotations
 
@@ -20,6 +23,11 @@ _IN_TRANSIT_STATUSES = frozenset({
     "ATTEMPTED_DELIVERY",   # will be re-tried
     "DELAYED",              # generic delay flag
 })
+
+
+def carrier_group_for(carrier: str) -> str:
+    """Map a carrier identifier to the coarse carrier group used by _PRIOR."""
+    return "cainiao" if carrier == "cainiao" else "domestic"
 
 
 def checkpoint_type(description: str, location: str = "") -> str:
@@ -69,11 +77,16 @@ def predict_eta(
     carrier: str,
     current_status: str | None,
     now: datetime | None = None,
+    learned_prior: tuple[float, float, float] | None = None,
 ) -> dict[str, Any] | None:
     """Predict delivery ETA from the last confirmed stop.
 
     Returns a dict with predicted_eta, low/high bounds, and metadata,
     or None if prediction is not applicable (not in transit, no timestamp).
+
+    learned_prior, when supplied, overrides the hardcoded _PRIOR table for this
+    (carrier_group, stop_type) pair.  It is a (median_h, p25_factor, p75_factor)
+    triple as returned by DeliveryStatsStore.get_learned_prior().
 
     `now` may be injected by callers for deterministic testing; defaults to UTC now.
     """
@@ -90,11 +103,17 @@ def predict_eta(
         return None
 
     ctype = checkpoint_type(last_stop_desc or "", last_stop_location or "")
-    carrier_group = "cainiao" if carrier == "cainiao" else "domestic"
-    median_h, p25_factor, p75_factor = _PRIOR.get(
-        (carrier_group, ctype),
-        _PRIOR[(carrier_group, "other")],
-    )
+    carrier_group = carrier_group_for(carrier)
+
+    if learned_prior is not None:
+        median_h, p25_factor, p75_factor = learned_prior
+        confidence = "learned"
+    else:
+        median_h, p25_factor, p75_factor = _PRIOR.get(
+            (carrier_group, ctype),
+            _PRIOR[(carrier_group, "other")],
+        )
+        confidence = "prior"
 
     median_eta = last_time + timedelta(hours=median_h)
     low_eta    = last_time + timedelta(hours=median_h * p25_factor)
@@ -109,7 +128,7 @@ def predict_eta(
         "predicted_eta_low":    low_eta.isoformat(),
         "predicted_eta_high":   high_eta.isoformat(),
         "overdue":              overdue,
-        "confidence":           "prior",
+        "confidence":           confidence,
         "basis_stop_type":      ctype,
         "basis_carrier_group":  carrier_group,
         "basis_median_hours":   median_h,

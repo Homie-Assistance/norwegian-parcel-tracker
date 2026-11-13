@@ -135,3 +135,34 @@ def test_predict_eta_returns_datetime_in_predicted_eta_key():
     assert result is not None
     assert isinstance(result["predicted_eta"], datetime)
     assert result["predicted_eta"].tzinfo is not None  # must be tz-aware
+
+
+# ── predict_eta with learned prior ───────────────────────────────────────────
+
+def test_predict_eta_uses_learned_prior():
+    """When learned_prior is supplied the confidence tag changes and the numbers differ."""
+    # 8h median, p25_factor 0.6, p75_factor 1.4 — deliberately different from built-in
+    learned = (8.0, 0.6, 1.4)
+    result = predict_eta(
+        "Oslo sorting terminal", None, _BASE_ISO, "posten", "IN_TRANSIT",
+        learned_prior=learned,
+    )
+    assert result is not None
+    assert result["confidence"] == "learned"
+    assert result["basis_median_hours"] == 8.0
+    expected_median = _BASE_TIME + timedelta(hours=8)
+    assert result["predicted_eta_iso"] == expected_median.isoformat()
+    expected_low  = _BASE_TIME + timedelta(hours=8 * 0.6)
+    expected_high = _BASE_TIME + timedelta(hours=8 * 1.4)
+    assert result["predicted_eta_low"]  == expected_low.isoformat()
+    assert result["predicted_eta_high"] == expected_high.isoformat()
+
+
+def test_predict_eta_none_learned_prior_falls_back_to_prior():
+    result = predict_eta(
+        "Oslo sorting terminal", None, _BASE_ISO, "posten", "IN_TRANSIT",
+        learned_prior=None,
+    )
+    assert result is not None
+    assert result["confidence"] == "prior"
+    assert result["basis_median_hours"] == 12.0  # domestic warehouse default
