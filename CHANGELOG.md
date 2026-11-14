@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.6.0 (unreleased)
+## 2.6.0
 
 - **Per-user parcel privacy** (issue #16): when a logged-in user adds a parcel via the `add_parcel` service (panel, Lovelace card, or automation), their HA user ID is stored as the unrecorded `owner_user_id` sensor attribute. Each user sees only their own parcels in the panel and in Lovelace cards (auto-discovery and explicitly configured); parcels without an owner (added before this version, via email watcher, or via Settings → Integrations) remain visible to everyone. The `remove_parcel`, `rename_parcel`, `set_note`, `add_note`, `clear_note`, `delete_note`, `set_icon`, `clear_icon` and `get_parcel_history` services raise `ServiceValidationError` when called by a user who is not the owner; automations and scripts with no user context are always permitted. **This integration gives admins no special override over ownership** — but Home Assistant itself does not enforce per-entity read permissions. An admin (or any user with Developer Tools access) can still see all parcel states in Developer Tools → States, history, logbook, the REST API and the websocket API. An admin can also delete any parcel entry from Settings → Integrations, which bypasses the service guard entirely. The HA native map (device_tracker entities), shared calendar events, and delivery notifications also remain unfiltered. Issue #16 stays open for those leaks.
 
