@@ -169,12 +169,16 @@ def _extract_text(msg: email_lib.message.Message) -> str:
 
 
 def _allowlist_changed(stored: str | None, current: str) -> bool:
-    """Return True when the allowlist has changed and seen UIDs should be cleared.
+    """Return True when the allowlist was widened (new domains added) and seen UIDs should be cleared.
 
-    Returns False when stored is None (pre-upgrade; no stored value exists yet)
-    so that a fresh install or upgrade does not spuriously clear the UID set.
+    Returns False when stored is None (pre-upgrade; no stored value exists yet),
+    or when domains were only removed (narrowing) — no rescan needed in that case.
     """
-    return stored is not None and current != stored
+    if stored is None:
+        return False
+    stored_domains = {d.strip() for d in stored.split(",") if d.strip()}
+    current_domains = {d.strip() for d in current.split(",") if d.strip()}
+    return bool(current_domains - stored_domains)
 
 
 def _extract_tracking_numbers(text: str) -> list[str]:
@@ -314,7 +318,7 @@ class EmailWatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "seen_tracking_numbers": list(self._seen_tracking_numbers),
             "pending_tracking_numbers": list(self._pending_tracking_numbers),
             "uidvalidity": self._uidvalidity,
-            "sender_allowlist": self._stored_sender_allowlist or "",
+            "sender_allowlist": self._stored_sender_allowlist,
         })
 
     async def _async_update_data(self) -> dict[str, Any]:

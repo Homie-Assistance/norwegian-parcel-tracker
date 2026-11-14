@@ -135,6 +135,18 @@ def test_arrival_time_returns_delivered_for_direct_delivery():
     assert h.arrival_time() == "2026-11-02T14:00:00+00:00"
 
 
+def test_arrival_time_returns_earliest_when_both_ready_and_delivered():
+    """When READY_FOR_PICKUP precedes DELIVERED, we want the pickup arrival time, not delivery."""
+    h = _make_history()
+    h._events = [
+        {"key": "k1", "date_iso": "2026-11-03T15:00:00+00:00", "status": "DELIVERED", "description": "Delivered"},
+        {"key": "k2", "date_iso": "2026-11-01T12:00:00+00:00", "status": "READY_FOR_PICKUP", "description": "Ready"},
+        {"key": "k3", "date_iso": "2026-10-30T08:00:00+00:00", "status": "IN_TRANSIT", "description": "In transit"},
+    ]
+    # Must return the EARLIEST qualifying event (READY_FOR_PICKUP), not the most-recent (DELIVERED)
+    assert h.arrival_time() == "2026-11-01T12:00:00+00:00"
+
+
 def test_arrival_time_returns_none_when_no_arrival_event():
     h = _make_history()
     h._events = [
@@ -162,6 +174,7 @@ def _make_stats_store():
     store._store = FakeDeliveryStore()
     store._records = []
     store._loaded = True
+    store._prior_cache = {}
     return store
 
 
@@ -225,10 +238,34 @@ async def test_get_learned_prior_returns_tuple_with_enough_samples():
     result = s.get_learned_prior("domestic", "warehouse")
     assert result is not None
     median_h, p25_factor, p75_factor = result
-    # n=5: n//2=2→14, n//4=1→12, 3*n//4=3→16
+    # n=5 (odd): median=sorted_h[2]=14; p25=sorted_h[int(4*0.25)=1]=12; p75=sorted_h[int(4*0.75)=3]=16
     assert median_h == 14.0
     assert p25_factor == pytest.approx(12.0 / 14.0, rel=1e-3)
     assert p75_factor == pytest.approx(16.0 / 14.0, rel=1e-3)
+
+
+@pytest.mark.asyncio
+async def test_get_learned_prior_even_n_median_averaged():
+    """For even n, median is the average of the two middle elements."""
+    s = _make_stats_store()
+    for i, h in enumerate([10.0, 12.0, 14.0, 16.0, 18.0, 20.0]):
+        s._records.append({
+            "tracking_number": f"TEST{i:03d}",
+            "carrier": "posten",
+            "carrier_group": "domestic",
+            "stop_type": "warehouse",
+            "actual_hours": h,
+            "first_event_time": None,
+            "delivered_time": "2026-11-02T08:00:00+00:00",
+        })
+    result = s.get_learned_prior("domestic", "warehouse")
+    assert result is not None
+    median_h, p25_factor, p75_factor = result
+    # n=6 (even): median=(sorted_h[2]+sorted_h[3])/2=(14+16)/2=15
+    # p25=sorted_h[int(5*0.25)=1]=12; p75=sorted_h[int(5*0.75)=3]=16
+    assert median_h == pytest.approx(15.0, rel=1e-3)
+    assert p25_factor == pytest.approx(12.0 / 15.0, rel=1e-3)
+    assert p75_factor == pytest.approx(16.0 / 15.0, rel=1e-3)
 
 
 @pytest.mark.asyncio

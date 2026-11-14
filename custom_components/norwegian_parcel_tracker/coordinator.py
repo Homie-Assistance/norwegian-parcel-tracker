@@ -80,7 +80,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         # Last non-None prediction metadata; kept across the transition to delivered so
         # _async_record_delivery can store the (carrier_group, stop_type, last_stop_time)
         # that was active when the parcel was still in transit.
-        self._last_prior_prediction: dict | None = None
+        self._last_prior_prediction: dict[str, Any] | None = None
         hass.data.setdefault(DOMAIN, {})
         if "_stats" not in hass.data[DOMAIN]:
             hass.data[DOMAIN]["_stats"] = DeliveryStatsStore(hass)
@@ -206,7 +206,7 @@ class PostenTrackingCoordinator(DataUpdateCoordinator[ParcelData]):
         if parcel.is_delivered:
             await self._async_record_delivery(parcel)
 
-    def _compute_prior_prediction(self, parcel: ParcelData) -> dict | None:
+    def _compute_prior_prediction(self, parcel: ParcelData) -> dict[str, Any] | None:
         """Return predict_eta() metadata for the current parcel state, or None."""
         from .eta import predict_eta
         latest = parcel.latest_event

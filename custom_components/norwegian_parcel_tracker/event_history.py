@@ -82,13 +82,13 @@ class ParcelEventHistory:
         return self._events[-1].get("date_iso") if self._events else None
 
     def arrival_time(self) -> str | None:
-        """Return the ISO time of the first READY_FOR_PICKUP or DELIVERED event.
+        """Return the ISO time of the earliest READY_FOR_PICKUP or DELIVERED event.
 
         Excludes PICKED_UP so that user pickup delay is not counted when computing
-        actual carrier transit time.  Events are stored newest-first, so a linear
-        scan finds the most recent qualifying event.
+        actual carrier transit time.  Events are stored newest-first, so we scan
+        in reverse (oldest-first) to find the first qualifying event chronologically.
         """
-        for event in self._events:
+        for event in reversed(self._events):
             if event.get("status") in ("READY_FOR_PICKUP", "DELIVERED"):
                 return event.get("date_iso")
         return None
@@ -111,11 +111,13 @@ class DeliveryStatsStore:
         )
         self._records: list[dict[str, Any]] = []
         self._loaded = False
+        self._prior_cache: dict[tuple[str, str], tuple[float, float, float] | None] = {}
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
         self._records = data.get("records", [])
         self._loaded = True
+        self._prior_cache.clear()
 
     async def record_delivery(
         self,
@@ -163,6 +165,7 @@ class DeliveryStatsStore:
                 pass
 
         self._records.append(record)
+        self._prior_cache.clear()
         self._store.async_delay_save(
             lambda: {"version": _STORE_VERSION, "records": list(self._records)}, _SAVE_DELAY
         )
@@ -179,7 +182,13 @@ class DeliveryStatsStore:
         Uses actual hours from the last in-transit stop to delivery for the given
         (carrier_group, stop_type) pair.  Returns None when fewer than min_samples
         qualifying records exist so callers can fall back to hardcoded priors.
+        Result is cached; the cache is invalidated whenever a new record is added or
+        the store is reloaded, so the sensor property getter stays O(1).
         """
+        cache_key = (carrier_group, stop_type)
+        if cache_key in self._prior_cache:
+            return self._prior_cache[cache_key]
+
         samples = [
             r["actual_hours"]
             for r in self._records
@@ -189,17 +198,24 @@ class DeliveryStatsStore:
             and r["actual_hours"] > 0
         ]
         if len(samples) < min_samples:
+            self._prior_cache[cache_key] = None
             return None
 
         sorted_h = sorted(samples)
         n = len(sorted_h)
-        median_h = sorted_h[n // 2]
-        p25_h = sorted_h[n // 4]
-        p75_h = sorted_h[min(3 * n // 4, n - 1)]
+        # Proper median: average the two middle elements for even n.
+        mid = n // 2
+        median_h = (sorted_h[mid - 1] + sorted_h[mid]) / 2 if n % 2 == 0 else sorted_h[mid]
+        # Percentiles using linear-interpolation index (matches numpy/statistics default).
+        p25_h = sorted_h[int((n - 1) * 0.25)]
+        p75_h = sorted_h[int((n - 1) * 0.75)]
 
         if median_h <= 0:
+            self._prior_cache[cache_key] = None
             return None
-        return (median_h, p25_h / median_h, p75_h / median_h)
+        result: tuple[float, float, float] = (median_h, p25_h / median_h, p75_h / median_h)
+        self._prior_cache[cache_key] = result
+        return result
 
     def get_records(self) -> list[dict[str, Any]]:
         return list(self._records)

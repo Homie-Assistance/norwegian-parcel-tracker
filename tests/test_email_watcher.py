@@ -253,7 +253,8 @@ def test_allowlist_changed_none_stored_never_triggers():
     assert _allowlist_changed(None, "") is False
 
 
-def test_allowlist_changed_different_value_triggers():
+def test_allowlist_changed_domain_added_triggers():
+    """Adding a new domain widens the filter → rescan needed."""
     assert _allowlist_changed("bring.com", "bring.com, posten.no") is True
 
 
@@ -262,8 +263,11 @@ def test_allowlist_changed_same_value_no_trigger():
 
 
 def test_allowlist_changed_empty_stored_to_nonempty_triggers():
+    """Going from allow-all to domain-restricted widens from no filter."""
     assert _allowlist_changed("", "bring.com") is True
 
 
-def test_allowlist_changed_nonempty_to_empty_triggers():
-    assert _allowlist_changed("bring.com", "") is True
+def test_allowlist_changed_domain_removed_no_trigger():
+    """Removing a domain narrows the filter → no unnecessary rescan."""
+    assert _allowlist_changed("bring.com, posten.no", "bring.com") is False
+    assert _allowlist_changed("bring.com", "") is False
